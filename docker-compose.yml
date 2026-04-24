@@ -1,0 +1,22 @@
+# Infrastructure for AI Clinic Assistant
+# Runs MongoDB and Redis using Docker
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: clinic-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+
+  redis:
+    image: redis:latest
+    container_name: clinic-redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  mongodb_data:

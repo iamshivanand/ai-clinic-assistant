@@ -1,21 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import AdminLayout from './components/AdminLayout';
-import Dashboard from './pages/Dashboard';
-import SuperAdminAnalytics from './pages/SuperAdminAnalytics';
-import Chat from './pages/Chat';
-import WhatsAppSetup from './pages/WhatsAppSetup';
-import ProtectedRoute from './components/ProtectedRoute';
+import useAuthStore from './store/useAuthStore';
+
+// Components and Layouts
+const AdminLayout = lazy(() => import('./components/AdminLayout'));
+const ProtectedRoute = lazy(() => import('./components/ProtectedRoute'));
+
+// Pages
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const SuperAdminAnalytics = lazy(() => import('./pages/SuperAdminAnalytics'));
+const Chat = lazy(() => import('./pages/Chat'));
+const WhatsAppSetup = lazy(() => import('./pages/WhatsAppSetup'));
+
+const LoadingFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+  </div>
+);
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuthStore();
 
   const handleLogin = (role) => {
     // Simulate login for development
     const user = { name: role === 'DOCTOR' ? 'Dr. Admin' : 'Super Admin', email, role };
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', 'fake-jwt-token');
+    login(user, 'fake-jwt-token');
     navigate('/');
   };
 
@@ -45,48 +56,41 @@ const Login = () => {
   );
 };
 
-const SuperAdminDashboard = () => (
-  <div className="space-y-6">
-    <h1 className="text-2xl font-bold">Super Admin Dashboard</h1>
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-      <p>Manage all clinics and system performance here.</p>
-    </div>
-  </div>
-);
-
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        
-        {/* Protected Doctor Routes */}
-        <Route 
-          path="/" 
-          element={
-            <ProtectedRoute allowedRoles={['DOCTOR', 'SUPER_ADMIN']}>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="patients" element={<Chat />} />
-          <Route path="settings" element={<div>Clinic Settings</div>} />
-          <Route path="bot-settings" element={<WhatsAppSetup />} />
-        </Route>
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          {/* Protected Doctor Routes */}
+          <Route 
+            path="/" 
+            element={
+              <ProtectedRoute allowedRoles={['DOCTOR', 'SUPER_ADMIN']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Dashboard />} />
+            <Route path="patients" element={<Chat />} />
+            <Route path="settings" element={<div>Clinic Settings</div>} />
+            <Route path="bot-settings" element={<WhatsAppSetup />} />
+          </Route>
 
-        {/* Protected Super Admin Routes */}
-        <Route 
-          path="/super-admin" 
-          element={
-            <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<SuperAdminAnalytics />} />
-        </Route>
-      </Routes>
+          {/* Protected Super Admin Routes */}
+          <Route 
+            path="/super-admin" 
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<SuperAdminAnalytics />} />
+          </Route>
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

@@ -1,13 +1,11 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import useAuthStore from '../store/useAuthStore';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const location = useLocation();
+  const { user } = useAuthStore();
   
-  // For now, let's simulate user data from localStorage
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : null;
-
   if (!user) {
     // Redirect to login if not authenticated
     return <Navigate to="/login" state={{ from: location }} replace />;

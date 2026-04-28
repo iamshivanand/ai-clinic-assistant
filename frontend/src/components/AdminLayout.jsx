@@ -1,5 +1,6 @@
 import React from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import useAuthStore from '../store/useAuthStore';
 import { 
   LayoutDashboard, 
   Users, 
@@ -29,6 +30,14 @@ const SidebarLink = ({ to, icon: Icon, children }) => (
 );
 
 const AdminLayout = () => {
+  const { logout } = useAuthStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50/50">
       {/* Sidebar */}
@@ -48,7 +57,10 @@ const AdminLayout = () => {
         </nav>
 
         <div className="pt-6 mt-6 border-t border-gray-100">
-          <button className="flex items-center space-x-3 px-4 py-3 w-full text-gray-500 hover:text-red-600 transition-colors">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center space-x-3 px-4 py-3 w-full text-gray-500 hover:text-red-600 transition-colors"
+          >
             <LogOut className="h-5 w-5" />
             <span className="font-medium">Logout</span>
           </button>

@@ -74,4 +74,34 @@ router.get('/charts', protect, restrictTo('SUPER_ADMIN'), async (req, res, next)
   }
 });
 
+// GET /api/analytics/clinic - Individual clinic stats
+router.get('/clinic', protect, async (req, res, next) => {
+  try {
+    const clinicId = req.user.clinicId;
+    if (!clinicId) return res.status(400).json({ success: false, message: 'No clinic found' });
+
+    const totalPatients = await Patient.countDocuments({ clinicId });
+    const totalMessages = await Message.countDocuments({ clinicId });
+    const totalAppointments = await Appointment.countDocuments({ clinicId });
+    
+    // Simple conversion rate calculation
+    const conversionRate = totalPatients > 0 
+      ? Math.round((totalAppointments / totalPatients) * 100) 
+      : 100;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalPatients,
+        totalMessages,
+        totalAppointments,
+        conversionRate,
+        botInteractions: totalMessages // Mocking bot interactions as message count for now
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

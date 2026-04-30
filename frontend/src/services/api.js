@@ -26,6 +26,15 @@ api.interceptors.response.use(
   }
 );
 
+// Auth API
+export const login = (credentials) => api.post('/auth/login', credentials);
+export const register = (data) => api.post('/auth/register', data);
+
+// Admin API
+export const getAdminClinics = () => api.get('/admin/clinics');
+export const updateAdminClinic = (id, data) => api.patch(`/admin/clinics/${id}`, data);
+
+// Appointments
 export const getAppointments = () => api.get('/appointments');
 export const getClinicInfo = () => api.get('/clinic/me');
 export const updateClinicInfo = (data) => api.put('/clinic/update', data);
@@ -40,5 +49,6 @@ export const toggleBot = (patientId, isPaused) => api.patch('/chat/toggle-bot', 
 // Analytics API
 export const getAnalyticsSummary = () => api.get('/analytics/summary');
 export const getAnalyticsCharts = () => api.get('/analytics/charts');
+export const getClinicAnalytics = () => api.get('/analytics/clinic');
 
 export default api;

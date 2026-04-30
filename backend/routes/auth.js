@@ -19,16 +19,27 @@ const signToken = (id) => {
   });
 };
 
+const Clinic = require('../models/Clinic');
+
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, email, password, clinicId } = req.body;
+    const { name, email, password, clinicName, ownerName } = req.body;
     
+    // 1. Create the Clinic in PENDING state
+    const newClinic = await Clinic.create({
+      name: clinicName || `${name}'s Clinic`,
+      ownerName: ownerName || name,
+      email: email,
+      status: 'PENDING'
+    });
+
+    // 2. Create the User linked to the Clinic
     const newUser = await User.create({
       name,
       email,
       password,
-      role: 'DOCTOR', // Prevent mass assignment of SUPER_ADMIN
-      clinicId
+      role: 'DOCTOR',
+      clinicId: newClinic._id
     });
 
     const token = signToken(newUser._id);
@@ -36,7 +47,10 @@ router.post('/register', async (req, res, next) => {
     res.status(201).json({
       success: true,
       token,
-      data: { user: newUser }
+      data: { 
+        user: newUser,
+        clinic: newClinic
+      }
     });
   } catch (error) {
     next(error);
@@ -51,7 +65,7 @@ router.post('/login', async (req, res, next) => {
       return next(new AppError('Please provide email and password', 400, 'BAD_REQUEST'));
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select('+password').populate('clinicId');
     if (!user || !(await user.comparePassword(password))) {
       return next(new AppError('Incorrect email or password', 401, 'INVALID_CREDENTIALS'));
     }
@@ -67,7 +81,7 @@ router.post('/login', async (req, res, next) => {
           name: user.name,
           email: user.email,
           role: user.role,
-          clinicId: user.clinicId
+          clinic: user.clinicId // This is now populated
         } 
       }
     });

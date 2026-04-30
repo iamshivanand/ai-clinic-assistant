@@ -14,6 +14,8 @@ const chatRoutes = require('./routes/chat');
 const prescriptionRoutes = require('./routes/prescription');
 const paymentWebhookRoutes = require('./routes/paymentWebhook');
 const analyticsRoutes = require('./routes/analytics');
+const adminRoutes = require('./routes/admin');
+const appointmentRoutes = require('./routes/appointments');
 
 // Initialize Workers
 require('./workers/botWorker');
@@ -60,7 +62,7 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use('/api/', apiLimiter);
+// app.use('/api/', apiLimiter);
 app.use('/api/webhook', webhookLimiter);
 app.use('/api/webhooks', webhookLimiter);
 
@@ -73,12 +75,14 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/webhook', webhookRoutes);
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/prescription', prescriptionRoutes);
 app.use('/api/webhooks', paymentWebhookRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/appointments', appointmentRoutes);
 
 // Static files for PDFs
 app.use('/prescriptions', express.static('public/prescriptions'));

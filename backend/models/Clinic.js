@@ -13,8 +13,23 @@ const ClinicSchema = new mongoose.Schema({
   availableSlots: { type: [String], default: ['10:00 AM', '11:30 AM', '02:00 PM', '04:30 PM'] },
   subscriptionPlan: {
     type: String,
-    enum: ['basic', 'pro'],
+    enum: ['basic', 'pro', 'enterprise'],
     default: 'basic'
+  },
+  status: {
+    type: String,
+    enum: ['PENDING', 'ACTIVE', 'SUSPENDED'],
+    default: 'PENDING'
+  },
+  enabledFeatures: {
+    type: Map,
+    of: Boolean,
+    default: {
+      'ai_chat': true,
+      'appointments': true,
+      'analytics': false,
+      'prescriptions': false
+    }
   },
   createdAt: { type: Date, default: Date.now }
 });

@@ -4,76 +4,50 @@ import useAuthStore from './store/useAuthStore';
 
 // Components and Layouts
 const AdminLayout = lazy(() => import('./components/AdminLayout'));
-const ProtectedRoute = lazy(() => import('./components/ProtectedRoute'));
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const SuperAdminAnalytics = lazy(() => import('./pages/SuperAdminAnalytics'));
-const Chat = lazy(() => import('./pages/Chat'));
 const WhatsAppSetup = lazy(() => import('./pages/WhatsAppSetup'));
-
-const LoadingFallback = () => (
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const PendingApproval = lazy(() => import('./pages/PendingApproval'));
+const Unauthorized = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    <div className="text-center p-10 bg-white rounded-3xl shadow-xl">
+      <h1 className="text-4xl font-bold text-red-600 mb-4">403</h1>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
+      <p className="text-gray-500 mb-6">You don't have permission to access this page.</p>
+      <button onClick={() => window.location.href = '/login'} className="text-blue-600 font-bold hover:underline">Return to Login</button>
+    </div>
   </div>
 );
 
-const Login = () => {
-  const [email, setEmail] = useState('');
-  const navigate = useNavigate();
-  const { login } = useAuthStore();
-
-  const handleLogin = (role) => {
-    // Simulate login for development
-    const user = { name: role === 'DOCTOR' ? 'Dr. Admin' : 'Super Admin', email, role };
-    login(user, 'fake-jwt-token');
-    navigate('/');
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-xl border border-gray-100">
-        <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900">AI Clinic Portal</h2>
-          <p className="mt-2 text-sm text-gray-600">Please sign in to your account</p>
-        </div>
-        <div className="space-y-4">
-          <button 
-            onClick={() => handleLogin('DOCTOR')}
-            className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200"
-          >
-            Sign in as Doctor
-          </button>
-          <button 
-            onClick={() => handleLogin('SUPER_ADMIN')}
-            className="w-full py-3 px-4 bg-gray-900 text-white rounded-xl font-semibold hover:bg-gray-800 transition-colors shadow-lg shadow-gray-200"
-          >
-            Sign in as Super Admin
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+const LoadingFallback = () => null;
 
 function App() {
+  const { user } = useAuthStore();
+  const isPending = user?.role === 'DOCTOR' && user?.clinic?.status === 'PENDING';
+
   return (
     <BrowserRouter>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
           
           {/* Protected Doctor Routes */}
           <Route 
             path="/" 
             element={
               <ProtectedRoute allowedRoles={['DOCTOR', 'SUPER_ADMIN']}>
-                <AdminLayout />
+                {isPending ? <PendingApproval /> : <AdminLayout />}
               </ProtectedRoute>
             }
           >
             <Route index element={<Dashboard />} />
-            <Route path="patients" element={<Chat />} />
             <Route path="settings" element={<div>Clinic Settings</div>} />
             <Route path="bot-settings" element={<WhatsAppSetup />} />
           </Route>

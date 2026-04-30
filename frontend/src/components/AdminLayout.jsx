@@ -3,34 +3,14 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { 
   LayoutDashboard, 
-  Users, 
   Settings, 
   MessageSquare, 
   LogOut,
   Stethoscope
 } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-const cn = (...inputs) => twMerge(clsx(inputs));
-
-const SidebarLink = ({ to, icon: Icon, children }) => (
-  <NavLink
-    to={to}
-    className={({ isActive }) => cn(
-      "flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200",
-      isActive 
-        ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
-        : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-    )}
-  >
-    <Icon className="h-5 w-5" />
-    <span className="font-medium">{children}</span>
-  </NavLink>
-);
 
 const AdminLayout = () => {
-  const { logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -39,39 +19,28 @@ const AdminLayout = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50/50">
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f8fafc' }}>
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-100 p-6 flex flex-col hidden lg:flex">
-        <div className="flex items-center space-x-3 mb-10 px-2">
-          <div className="bg-blue-600 p-2 rounded-lg">
-            <Stethoscope className="h-6 w-6 text-white" />
+      <aside style={{ width: '250px', backgroundColor: 'white', borderRight: '1px solid #e2e8f0', padding: '24px', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', zIndex: 1000 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' }}>
+          <div style={{ backgroundColor: '#2563eb', padding: '8px', borderRadius: '8px' }}>
+            <Stethoscope size={24} color="white" />
           </div>
-          <span className="text-xl font-bold text-gray-900 tracking-tight">AI Clinic</span>
+          <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#1e293b' }}>AI Clinic</span>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          <SidebarLink to="/" icon={LayoutDashboard}>Dashboard</SidebarLink>
-          <SidebarLink to="/patients" icon={Users}>Patients</SidebarLink>
-          <SidebarLink to="/bot-settings" icon={MessageSquare}>WhatsApp Bot</SidebarLink>
-          <SidebarLink to="/settings" icon={Settings}>Settings</SidebarLink>
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <NavLink to="/" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>Dashboard</NavLink>
+          <NavLink to="/bot-settings" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>WhatsApp Bot</NavLink>
+          <NavLink to="/settings" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>Settings</NavLink>
         </nav>
 
-        <div className="pt-6 mt-6 border-t border-gray-100">
-          <button 
-            onClick={handleLogout}
-            className="flex items-center space-x-3 px-4 py-3 w-full text-gray-500 hover:text-red-600 transition-colors"
-          >
-            <LogOut className="h-5 w-5" />
-            <span className="font-medium">Logout</span>
-          </button>
-        </div>
+        <button onClick={handleLogout} style={{ marginTop: '24px', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: 'transparent', color: '#64748b', fontWeight: 'bold', textAlign: 'left', cursor: 'pointer' }}>Logout</button>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
-        <div className="max-w-6xl mx-auto">
-          <Outlet />
-        </div>
+      <main style={{ flex: 1, padding: '32px', position: 'relative', zIndex: 1 }}>
+        <Outlet />
       </main>
     </div>
   );

@@ -8,6 +8,7 @@ const useAuthStore = create(
       token: null,
       
       login: (userData, token) => {
+        // userData should include the user info and clinic info
         set({ user: userData, token: token });
       },
       

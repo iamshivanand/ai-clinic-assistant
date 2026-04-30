@@ -14,8 +14,10 @@ const seed = async () => {
     if (!clinic) {
       clinic = await Clinic.create({
         name: 'Test Clinic',
+        ownerName: 'Dr. Test Owner',
         address: '123 AI Street, Tech City',
-        phone: '1234567890'
+        phone: '1234567890',
+        status: 'ACTIVE'
       });
       console.log('Clinic created.');
     }
@@ -31,6 +33,18 @@ const seed = async () => {
         clinicId: clinic._id
       });
       console.log('User created.');
+    }
+
+    // 2.1 Create a Super Admin
+    let superAdmin = await User.findOne({ email: 'admin@test.com' });
+    if (!superAdmin) {
+      superAdmin = await User.create({
+        name: 'Super Admin',
+        email: 'admin@test.com',
+        password: 'adminpassword123',
+        role: 'SUPER_ADMIN'
+      });
+      console.log('Super Admin created.');
     }
 
     // 3. Create a Doctor Profile

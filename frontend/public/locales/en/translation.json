@@ -1,0 +1,33 @@
+{
+  "common": {
+    "welcome": "Welcome",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "error": "Something went wrong"
+  },
+  "dashboard": {
+    "title": "Clinic Dashboard",
+    "welcome_msg": "Welcome, {{name}}. The AI is managing your queue.",
+    "bot_live": "Bot Live",
+    "total_appointments": "Total Appointments",
+    "bot_interactions": "Bot Interactions",
+    "conversion_rate": "Conversion Rate",
+    "trends": "Appointment Trends",
+    "last_7_days": "Last 7 Days",
+    "auto_pilot": "Auto-Pilot",
+    "auto_pilot_desc": "The AI is currently handling all patient inquiries via strict templates.",
+    "configure_bot": "Configure Bot",
+    "clinic_info": "Clinic Info",
+    "recent_appointments": "Recent Appointments",
+    "live_feed": "Live Feed",
+    "no_appointments": "No appointments found yet."
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email Address",
+    "password": "Password",
+    "forgot_password": "Forgot Password?"
+  }
+}

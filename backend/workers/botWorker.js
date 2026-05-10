@@ -10,6 +10,8 @@ const Message = require('../models/Message');
 const { getOrCreateDefaultClinic } = require('../utils/clinicHelper');
 const redis = require('../utils/redis');
 const Doctor = require('../models/Doctor');
+const { parseTemplate } = require('../utils/templateParser');
+const { t } = require('../utils/i18nHelper');
 
 async function getCachedDoctors(clinicId) {
   const cacheKey = `clinic:${clinicId}:doctors`;
@@ -125,9 +127,13 @@ const botWorker = new Worker(
 );
 
 async function sendWelcomeMessage(to) {
+  const clinic = await getOrCreateDefaultClinic();
+  const lang = clinic.preferredLanguage || 'en';
+  const message = clinic.portfolio?.chatSettings?.welcomeMessage || t(lang, 'welcome');
+  
   await whatsappService.sendInteractiveButtons(
     to, 
-    "Welcome to AI Clinic! 👋\n\nHow can I help you today?",
+    message,
     [{ id: 'book_appointment', title: '📅 Book Appointment' }]
   );
   await sessionManager.setSession(to, { step: 'IDLE' });
@@ -136,16 +142,18 @@ async function sendWelcomeMessage(to) {
 async function handleBookAppointment(to, session) {
   const patient = await Patient.findOne({ phone: to });
   const clinic = await getOrCreateDefaultClinic();
+  const lang = clinic.preferredLanguage || 'en';
   const doctors = await getCachedDoctors(clinic._id);
 
   if (!patient) {
-    await whatsappService.sendTextMessage(to, "It looks like it's your first time here! Please tell me your full name to get started.");
+    const message = clinic.portfolio?.chatSettings?.askNameMessage || t(lang, 'ask_name');
+    await whatsappService.sendTextMessage(to, message);
     await sessionManager.setSession(to, { step: 'AWAITING_NAME' });
     return;
   }
 
   if (doctors.length === 0) {
-    await whatsappService.sendTextMessage(to, "I'm sorry, no doctors are currently available. Please try again later.");
+    await whatsappService.sendTextMessage(to, t(lang, 'not_available'));
     return;
   }
 
@@ -155,9 +163,11 @@ async function handleBookAppointment(to, session) {
     description: doc.specialty
   }));
 
+  const message = clinic.portfolio?.chatSettings?.selectDoctorMessage || t(lang, 'select_doctor');
+
   await whatsappService.sendInteractiveList(
     to,
-    "Please select a specialist you'd like to book with:",
+    message,
     "Select Doctor",
     [{ title: "Available Specialists", rows }]
   );
@@ -199,9 +209,14 @@ async function handleDoctorSelection(to, choiceId, session) {
     return;
   }
 
+  const clinic = await getOrCreateDefaultClinic();
+  const lang = clinic.preferredLanguage || 'en';
+  const template = clinic.portfolio?.chatSettings?.selectDateMessage || t(lang, 'select_date');
+  const message = parseTemplate(template, { doctorName: doctor.name });
+
   await whatsappService.sendInteractiveButtons(
     to,
-    `Excellent. You've chosen ${doctor.name}. Which date would you like to visit?`,
+    message,
     [
       { id: 'date_tomorrow', title: 'Tomorrow' },
       { id: 'date_day_after', title: 'Day after tomorrow' }
@@ -225,7 +240,9 @@ async function handleDateSelection(to, choiceId, session) {
     dateLabel = 'Day after tomorrow';
     dateObj.setDate(dateObj.getDate() + 2);
   } else {
-    await whatsappService.sendTextMessage(to, "Please select an option using the buttons provided.");
+    const clinic = await getOrCreateDefaultClinic();
+    const lang = clinic.preferredLanguage || 'en';
+    await whatsappService.sendTextMessage(to, t(lang, 'invalid_selection'));
     return;
   }
 
@@ -239,9 +256,14 @@ async function handleDateSelection(to, choiceId, session) {
     title: slot
   }));
 
+  const clinic = await getOrCreateDefaultClinic();
+  const lang = clinic.preferredLanguage || 'en';
+  const template = clinic.portfolio?.chatSettings?.selectTimeMessage || t(lang, 'select_time');
+  const message = parseTemplate(template, { doctorName: session.data.chosenDoctorName, date: dateLabel });
+
   await whatsappService.sendInteractiveList(
     to,
-    `Great! What time works best for your appointment with ${session.data.chosenDoctorName} on ${dateLabel}?`,
+    message,
     "Select Time Slot",
     [{ title: "Available Slots", rows }]
   );
@@ -305,7 +327,15 @@ async function handleTimeSelection(to, choiceId, session) {
     await appointment.save();
 
     // 3. Send Payment Request
-    let paymentMsg = `🗓️ Almost there! To confirm your appointment with ${session.data.chosenDoctorName} on ${session.data.dateLabel} at ${timeLabel}, please pay the consultation fee of ₹${doctor.consultationFee || 500}.\n\n💳 Pay here: ${paymentLinkResponse.short_url}\n\n*Note:* The booking will be automatically confirmed once the payment is successful.`;
+    const lang = clinic.preferredLanguage || 'en';
+    const template = clinic.portfolio?.chatSettings?.paymentRequestMessage || t(lang, 'payment_request');
+    const paymentMsg = parseTemplate(template, {
+      doctorName: session.data.chosenDoctorName,
+      date: session.data.dateLabel,
+      time: timeLabel,
+      fee: doctor.consultationFee || 500,
+      paymentLink: paymentLinkResponse.short_url
+    });
 
     await whatsappService.sendTextMessage(to, paymentMsg);
     

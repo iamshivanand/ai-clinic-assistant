@@ -5,6 +5,7 @@ import {
   LayoutDashboard, 
   Settings, 
   MessageSquare, 
+  Globe,
   LogOut,
   Stethoscope
 } from 'lucide-react';
@@ -31,6 +32,11 @@ const AdminLayout = () => {
 
         <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <NavLink to="/" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>Dashboard</NavLink>
+          
+          {user?.clinic?.enabledFeatures?.website_portfolio && (
+            <NavLink to="/portfolio" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>Website Builder</NavLink>
+          )}
+          
           <NavLink to="/bot-settings" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>WhatsApp Bot</NavLink>
           <NavLink to="/settings" style={({ isActive }) => ({ padding: '12px', borderRadius: '8px', textDecoration: 'none', color: isActive ? 'white' : '#64748b', backgroundColor: isActive ? '#2563eb' : 'transparent', fontWeight: 'bold' })}>Settings</NavLink>
         </nav>

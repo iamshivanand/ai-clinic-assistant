@@ -1,0 +1,11 @@
+{
+  "welcome": "Welcome to AI Clinic! 👋\n\nHow can I help you today?",
+  "ask_name": "It looks like it's your first time here! Please tell me your full name to get started.",
+  "select_doctor": "Please select a specialist you'd like to book with:",
+  "select_date": "Excellent. You've chosen {{doctorName}}. Which date would you like to visit?",
+  "select_time": "Great! What time works best for your appointment with {{doctorName}} on {{date}}?",
+  "payment_request": "🗓️ Almost there! To confirm your appointment with {{doctorName}} on {{date}} at {{time}}, please pay the consultation fee of ₹{{fee}}.\n\n💳 Pay here: {{paymentLink}}",
+  "not_available": "I'm sorry, no doctors are currently available. Please try again later.",
+  "invalid_selection": "Please select an option using the buttons/list provided.",
+  "error": "I'm sorry, I encountered an error. Please try again later."
+}

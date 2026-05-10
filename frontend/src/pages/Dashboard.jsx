@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Users, Calendar, Clock, MapPin, CheckCircle, TrendingUp, Bot, ArrowUpRight, Loader2 } from 'lucide-react';
 import { 
   LineChart, 
@@ -15,6 +16,7 @@ import { getAppointments, getClinicAnalytics } from '../services/api';
 import useAuthStore from '../store/useAuthStore';
 
 const Dashboard = () => {
+  const { t } = useTranslation();
   const [appointments, setAppointments] = useState([]);
   const [statsData, setStatsData] = useState({
     botInteractions: 0,
@@ -42,9 +44,9 @@ const Dashboard = () => {
   }, []);
 
   const stats = [
-    { label: "Total Appointments", value: appointments.length.toString(), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
-    { label: 'Bot Interactions', value: statsData.botInteractions.toString(), icon: Bot, color: 'text-purple-600', bg: 'bg-purple-100' },
-    { label: 'Conversion Rate', value: `${statsData.conversionRate}%`, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-100' },
+    { label: t('dashboard.total_appointments'), value: appointments.length.toString(), icon: Calendar, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { label: t('dashboard.bot_interactions'), value: statsData.botInteractions.toString(), icon: Bot, color: 'text-purple-600', bg: 'bg-purple-100' },
+    { label: t('dashboard.conversion_rate'), value: `${statsData.conversionRate}%`, icon: TrendingUp, color: 'text-green-600', bg: 'bg-green-100' },
   ];
 
   if (loading) {
@@ -59,14 +61,14 @@ const Dashboard = () => {
     <div className="space-y-8 pb-12">
       <header className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Clinic Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{t('dashboard.title')}</h1>
           <p className="text-gray-500 mt-1">
-            Welcome, <span className="font-bold text-gray-900">{user?.name}</span>. The AI is managing your queue.
+            {t('dashboard.welcome_msg', { name: user?.name })}
           </p>
         </div>
         <div className="flex items-center space-x-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-bold border border-green-100 shadow-sm">
           <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Bot Live</span>
+          <span>{t('dashboard.bot_live')}</span>
         </div>
       </header>
 

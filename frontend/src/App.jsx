@@ -13,6 +13,8 @@ const WhatsAppSetup = lazy(() => import('./pages/WhatsAppSetup'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const PendingApproval = lazy(() => import('./pages/PendingApproval'));
+const PortfolioBuilder = lazy(() => import('./pages/PortfolioBuilder'));
+const PublicPortfolio = lazy(() => import('./pages/PublicPortfolio'));
 const Unauthorized = () => (
   <div className="min-h-screen flex items-center justify-center bg-gray-50">
     <div className="text-center p-10 bg-white rounded-3xl shadow-xl">
@@ -37,6 +39,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/p/:slug" element={<PublicPortfolio />} />
           
           {/* Protected Doctor Routes */}
           <Route 
@@ -48,6 +51,7 @@ function App() {
             }
           >
             <Route index element={<Dashboard />} />
+            <Route path="portfolio" element={<PortfolioBuilder />} />
             <Route path="settings" element={<div>Clinic Settings</div>} />
             <Route path="bot-settings" element={<WhatsAppSetup />} />
           </Route>

@@ -16,6 +16,7 @@ const paymentWebhookRoutes = require('./routes/paymentWebhook');
 const analyticsRoutes = require('./routes/analytics');
 const adminRoutes = require('./routes/admin');
 const appointmentRoutes = require('./routes/appointments');
+const portfolioRoutes = require('./routes/portfolio');
 
 // Initialize Workers
 require('./workers/botWorker');
@@ -83,8 +84,10 @@ app.use('/api/webhooks', paymentWebhookRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
-// Static files for PDFs
+// Static files
+app.use(express.static('public'));
 app.use('/prescriptions', express.static('public/prescriptions'));
 
 // Health Check

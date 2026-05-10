@@ -26,6 +26,7 @@ const SuperAdminAnalytics = () => {
   const [clinics, setClinics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [editingTemplates, setEditingTemplates] = useState(null); // The clinic being edited
 
   useEffect(() => {
     fetchData();
@@ -194,7 +195,7 @@ const SuperAdminAnalytics = () => {
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex space-x-2">
-                        {['ai_chat', 'analytics', 'prescriptions'].map(feature => (
+                        {['ai_chat', 'analytics', 'prescriptions', 'website_portfolio'].map(feature => (
                           <button
                             key={feature}
                             onClick={() => toggleFeature(clinic, feature)}
@@ -208,8 +209,16 @@ const SuperAdminAnalytics = () => {
                             {feature === 'ai_chat' && <Zap className="h-4 w-4" />}
                             {feature === 'analytics' && <Layers className="h-4 w-4" />}
                             {feature === 'prescriptions' && <ShieldCheck className="h-4 w-4" />}
+                            {feature === 'website_portfolio' && <Globe className="h-4 w-4" />}
                           </button>
                         ))}
+                        <button
+                          onClick={() => setEditingTemplates(clinic)}
+                          className="p-2 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-all"
+                          title="Edit Chat Templates"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </button>
                       </div>
                     </td>
                     <td className="px-8 py-6 text-right">
@@ -234,6 +243,67 @@ const SuperAdminAnalytics = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      {/* Chat Template Modal */}
+      {editingTemplates && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditingTemplates(null)}></div>
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Edit Chat Templates</h2>
+                <p className="text-gray-500 text-sm">{editingTemplates.name}</p>
+              </div>
+              <button onClick={() => setEditingTemplates(null)} className="p-2 hover:bg-gray-100 rounded-xl">
+                <XCircle className="h-6 w-6 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto space-y-6">
+              {[
+                { key: 'welcomeMessage', label: 'Welcome Message' },
+                { key: 'askNameMessage', label: 'Ask Name Message' },
+                { key: 'selectDoctorMessage', label: 'Select Doctor Message' },
+                { key: 'selectDateMessage', label: 'Select Date Message (use {{doctorName}})' },
+                { key: 'selectTimeMessage', label: 'Select Time Message (use {{doctorName}}, {{date}})' },
+                { key: 'paymentRequestMessage', label: 'Payment Request (use {{doctorName}}, {{date}}, {{time}}, {{fee}}, {{paymentLink}})' }
+              ].map(field => (
+                <div key={field.key} className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700 ml-1">{field.label}</label>
+                  <textarea 
+                    rows="3"
+                    className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-600 outline-none text-sm font-medium"
+                    value={editingTemplates.portfolio?.chatSettings?.[field.key] || ''}
+                    onChange={(e) => {
+                      const newClinic = { ...editingTemplates };
+                      if (!newClinic.portfolio) newClinic.portfolio = {};
+                      if (!newClinic.portfolio.chatSettings) newClinic.portfolio.chatSettings = {};
+                      newClinic.portfolio.chatSettings[field.key] = e.target.value;
+                      setEditingTemplates(newClinic);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="p-8 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3">
+              <button 
+                onClick={() => setEditingTemplates(null)}
+                className="px-6 py-2 text-gray-500 font-bold hover:text-gray-700 transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  handleUpdateClinic(editingTemplates._id, { portfolio: editingTemplates.portfolio });
+                  setEditingTemplates(null);
+                }}
+                className="px-8 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100"
+              >
+                Save Templates
+              </button>
+            </div>
           </div>
         </div>
       )}

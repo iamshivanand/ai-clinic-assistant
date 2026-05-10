@@ -1,0 +1,33 @@
+{
+  "common": {
+    "welcome": "स्वागत है",
+    "save": "सहेजें",
+    "cancel": "रद्द करें",
+    "loading": "लोड हो रहा है...",
+    "error": "कुछ गलत हो गया"
+  },
+  "dashboard": {
+    "title": "क्लिनिक डैशबोर्ड",
+    "welcome_msg": "स्वागत है, {{name}}। AI आपकी कतार का प्रबंधन कर रहा है।",
+    "bot_live": "बॉट लाइव",
+    "total_appointments": "कुल नियुक्तियाँ",
+    "bot_interactions": "बॉट बातचीत",
+    "conversion_rate": "रूपांतरण दर",
+    "trends": "नियुक्ति रुझान",
+    "last_7_days": "पिछले 7 दिन",
+    "auto_pilot": "ऑटो-पायलट",
+    "auto_pilot_desc": "AI वर्तमान में सख्त टेम्पलेट्स के माध्यम से सभी रोगी पूछताछ को संभाल रहा है।",
+    "configure_bot": "बॉट कॉन्फ़िगर करें",
+    "clinic_info": "क्लिनिक जानकारी",
+    "recent_appointments": "हाल की नियुक्तियाँ",
+    "live_feed": "लाइव फीड",
+    "no_appointments": "अभी तक कोई नियुक्ति नहीं मिली।"
+  },
+  "auth": {
+    "login": "लॉगिन",
+    "register": "पंजीकरण",
+    "email": "ईमेल पता",
+    "password": "पासवर्ड",
+    "forgot_password": "पासवर्ड भूल गए?"
+  }
+}

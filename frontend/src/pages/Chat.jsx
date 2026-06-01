@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Bot, Pause, Play, Search, Loader2 } from 'lucide-react';
+import { Send, User, Bot, Pause, Play, Search, Loader2, MessageSquare } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { getChatPatients, getChatMessages, sendChatMessage, toggleBot } from '../services/api';
 

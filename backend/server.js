@@ -14,6 +14,26 @@ const chatRoutes = require('./routes/chat');
 const prescriptionRoutes = require('./routes/prescription');
 const paymentWebhookRoutes = require('./routes/paymentWebhook');
 const analyticsRoutes = require('./routes/analytics');
+const dashboardRoutes = require('./routes/dashboard');
+
+// Production environment sanity check
+if (process.env.NODE_ENV === 'production') {
+  const requiredEnv = [
+    'MONGO_URI',
+    'JWT_SECRET',
+    'META_ACCESS_TOKEN',
+    'META_PHONE_NUMBER_ID',
+    'META_APP_SECRET',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
+    'RAZORPAY_WEBHOOK_SECRET'
+  ];
+  requiredEnv.forEach((key) => {
+    if (!process.env[key]) {
+      logger.error(`FATAL CONFIG ERROR: Required environment variable ${key} is missing in production!`);
+    }
+  });
+}
 
 // Initialize Workers
 require('./workers/botWorker');
@@ -54,7 +74,7 @@ const webhookLimiter = rateLimit({
 // Specific Limiters
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === 'production' ? 5 : 1000, // Relaxed for tests/dev
   message: 'Too many login attempts, please try again later',
   standardHeaders: true,
   legacyHeaders: false,
@@ -79,6 +99,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/prescription', prescriptionRoutes);
 app.use('/api/webhooks', paymentWebhookRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Static files for PDFs
 app.use('/prescriptions', express.static('public/prescriptions'));
@@ -89,7 +110,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Database Connection
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/ai-clinic-assistant', {
+mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/ai-clinic-assistant', {
   maxPoolSize: 50, // Tuning for high concurrency
 })
   .then(() => logger.info('MongoDB Connected successfully'))

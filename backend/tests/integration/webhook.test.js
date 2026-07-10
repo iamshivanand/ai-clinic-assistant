@@ -11,9 +11,11 @@ jest.mock('../../queues', () => ({
 }));
 
 const app = express();
-// Webhook parser needs raw body for signature validation if we were doing it properly, 
-// but in the app it uses express.json() and stringifies it.
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use('/api/webhook', webhookRoutes);
 
 describe('Webhook Integration Tests - Signature Validation', () => {

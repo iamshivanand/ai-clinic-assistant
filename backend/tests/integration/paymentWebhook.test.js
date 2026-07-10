@@ -8,6 +8,11 @@ jest.mock('../../queues', () => ({
   notificationQueue: { add: jest.fn() }
 }));
 
+jest.mock('../../models/WebhookEvent', () => ({
+  findOne: jest.fn().mockResolvedValue(null),
+  create: jest.fn().mockResolvedValue(true)
+}));
+
 const mockAppointment = {
   _id: 'mock-appointment-id',
   clinicId: { address: 'test address', googleMapsUrl: 'http://test.com', name: 'Test Clinic' },
@@ -30,7 +35,11 @@ jest.mock('../../services/whatsappService', () => ({
 }));
 
 const app = express();
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use('/api/payment', paymentWebhookRoutes);
 
 describe('Payment Webhook Integration Tests', () => {

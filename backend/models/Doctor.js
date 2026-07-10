@@ -24,4 +24,6 @@ const DoctorSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+DoctorSchema.index({ clinicId: 1 });
+
 module.exports = mongoose.model('Doctor', DoctorSchema);

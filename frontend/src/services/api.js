@@ -31,9 +31,16 @@ export const getClinicInfo = () => api.get('/clinic/me');
 export const updateClinicInfo = (data) => api.put('/clinic/update', data);
 export const getPatients = () => api.get('/patients');
 
+// Dashboard API
+export const getDashboardStats = () => api.get('/dashboard/stats');
+export const getDashboardAppointments = () => api.get('/dashboard/appointments');
+
 // Chat API
 export const getChatPatients = () => api.get('/chat/patients');
-export const getChatMessages = (patientId) => api.get(`/chat/messages/${patientId}`);
+export const getChatMessages = (patientId, before = null) => {
+  const url = before ? `/chat/messages/${patientId}?before=${before}` : `/chat/messages/${patientId}`;
+  return api.get(url);
+};
 export const sendChatMessage = (patientId, text) => api.post('/chat/send', { patientId, text });
 export const toggleBot = (patientId, isPaused) => api.patch('/chat/toggle-bot', { patientId, isPaused });
 

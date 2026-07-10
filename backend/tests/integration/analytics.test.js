@@ -7,7 +7,10 @@ const analyticsRoutes = require('../../routes/analytics');
 jest.mock('../../models/Clinic', () => ({ countDocuments: jest.fn().mockResolvedValue(10) }));
 jest.mock('../../models/Patient', () => ({ countDocuments: jest.fn().mockResolvedValue(100) }));
 jest.mock('../../models/Message', () => ({ countDocuments: jest.fn().mockResolvedValue(1000) }));
-jest.mock('../../models/Appointment', () => ({ find: jest.fn().mockResolvedValue(new Array(5)) }));
+jest.mock('../../models/Appointment', () => ({ 
+  find: jest.fn().mockResolvedValue(new Array(5)),
+  countDocuments: jest.fn().mockResolvedValue(5)
+}));
 jest.mock('../../utils/cache', () => ({ get: jest.fn().mockResolvedValue(null), setex: jest.fn() }));
 
 // Mock auth middleware

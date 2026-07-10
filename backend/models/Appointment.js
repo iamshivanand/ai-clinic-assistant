@@ -25,5 +25,9 @@ const AppointmentSchema = new mongoose.Schema({
 AppointmentSchema.index({ clinicId: 1, status: 1 });
 AppointmentSchema.index({ patientId: 1 });
 AppointmentSchema.index({ doctorId: 1, date: 1 });
+AppointmentSchema.index(
+  { doctorId: 1, date: 1, timeSlot: 1 },
+  { unique: true, partialFilterExpression: { status: 'scheduled' } }
+);
 
 module.exports = mongoose.model('Appointment', AppointmentSchema);

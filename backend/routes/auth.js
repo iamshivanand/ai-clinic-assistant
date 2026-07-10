@@ -1,8 +1,10 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { z } = require('zod');
 const User = require('../models/User');
 const { AppError } = require('../middleware/errorHandler');
+const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -19,7 +21,23 @@ const signToken = (id) => {
   });
 };
 
-router.post('/register', async (req, res, next) => {
+const registerSchema = z.object({
+  body: z.object({
+    name: z.string().min(2, 'Name must be at least 2 characters'),
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    clinicId: z.string().optional()
+  })
+});
+
+const loginSchema = z.object({
+  body: z.object({
+    email: z.string().email('Invalid email address'),
+    password: z.string().min(6, 'Password must be at least 6 characters')
+  })
+});
+
+router.post('/register', validate(registerSchema), async (req, res, next) => {
   try {
     const { name, email, password, clinicId } = req.body;
     
@@ -43,13 +61,9 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body;
-
-    if (!email || !password) {
-      return next(new AppError('Please provide email and password', 400, 'BAD_REQUEST'));
-    }
 
     const user = await User.findOne({ email }).select('+password');
     if (!user || !(await user.comparePassword(password))) {

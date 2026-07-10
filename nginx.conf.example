@@ -1,9 +1,26 @@
 # This is the NGINX configuration for serving the built React frontend
 # Place this in /etc/nginx/sites-available/ai-clinic-assistant on your Hostinger VPS
 
+# Redirect HTTP to HTTPS
 server {
     listen 80;
     server_name myclinicapp.com www.myclinicapp.com; # REPLACE WITH YOUR DOMAIN
+    return 301 https://$host$request_uri;
+}
+
+# Serve HTTPS
+server {
+    listen 443 ssl http2;
+    server_name myclinicapp.com www.myclinicapp.com; # REPLACE WITH YOUR DOMAIN
+
+    # SSL Certificate Paths (Managed by Let's Encrypt / Certbot)
+    ssl_certificate /etc/letsencrypt/live/myclinicapp.com/fullchain.pem; # REPLACE WITH YOUR DOMAIN PATH
+    ssl_certificate_key /etc/letsencrypt/live/myclinicapp.com/privkey.pem; # REPLACE WITH YOUR DOMAIN PATH
+
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
 
     # Serve the static React files
     root /var/www/ai-clinic-assistant/frontend/dist; # REPLACE WITH THE PATH TO YOUR FRONTEND BUILD
@@ -36,5 +53,6 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
 }

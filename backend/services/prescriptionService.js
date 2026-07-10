@@ -6,7 +6,7 @@ const path = require('path');
 class PrescriptionService {
   async generatePrescriptionPDF(data) {
     try {
-      const { doctorName, patientName, diagnosis, medicines, clinicName, clinicAddress } = data;
+      const { doctorName, patientName, diagnosis, medicines, clinicName, clinicAddress, isBlank } = data;
 
       const html = `
         <!DOCTYPE html>
@@ -15,13 +15,14 @@ class PrescriptionService {
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
             .header { border-bottom: 2px solid #3b82f6; padding-bottom: 20px; margin-bottom: 30px; }
-            .clinic-name { font-size: 24px; font-bold: true; color: #3b82f6; }
+            .clinic-name { font-size: 24px; font-weight: bold; color: #3b82f6; }
             .doctor-info { margin-top: 10px; font-size: 14px; }
             .patient-section { margin-bottom: 30px; }
             .section-title { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { text-align: left; padding: 12px; border-bottom: 1px solid #eee; }
             th { background-color: #f9fafb; color: #6b7280; font-size: 12px; text-transform: uppercase; }
+            .blank-line { border-bottom: 1px dotted #ccc; height: 35px; margin-bottom: 10px; }
             .footer { margin-top: 50px; font-size: 12px; color: #9ca3af; text-align: center; }
           </style>
         </head>
@@ -40,30 +41,48 @@ class PrescriptionService {
           </div>
 
           <div class="section-title">DIAGNOSIS</div>
-          <p>${diagnosis}</p>
+          ${isBlank 
+            ? '<div class="blank-line"></div><div class="blank-line"></div>'
+            : `<p>${diagnosis || 'Not specified'}</p>`
+          }
 
-          <div class="section-title">PRESCRIPTION (Rx)</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Medicine</th>
-                <th>Dosage</th>
-                <th>Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${medicines.map(m => `
-                <tr>
-                  <td>${m.name}</td>
-                  <td>${m.dosage}</td>
-                  <td>${m.duration}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+          <div class="section-title" style="margin-top: 20px;">PRESCRIPTION (Rx)</div>
+          ${isBlank 
+            ? `
+              <div class="blank-line" style="margin-top: 15px;"></div>
+              <div class="blank-line"></div>
+              <div class="blank-line"></div>
+              <div class="blank-line"></div>
+              <div class="blank-line"></div>
+              <div class="blank-line"></div>
+            `
+            : `
+              <table>
+                <thead>
+                  <tr>
+                    <th>Medicine</th>
+                    <th>Dosage</th>
+                    <th>Duration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(medicines || []).map(m => `
+                    <tr>
+                      <td>${m.name}</td>
+                      <td>${m.dosage}</td>
+                      <td>${m.duration}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            `
+          }
 
           <div class="footer">
-            This is an electronically generated prescription.
+            ${isBlank 
+              ? 'This is a printable prescription template.' 
+              : 'This is an electronically generated prescription.'
+            }
           </div>
         </body>
         </html>

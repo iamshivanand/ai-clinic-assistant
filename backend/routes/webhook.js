@@ -48,9 +48,6 @@ router.post('/', verifyWebhookSignature, async (req, res, next) => {
       return res.sendStatus(200);
     }
 
-    // Mark as processed
-    await WebhookEvent.create({ eventId, provider: 'meta' });
-
     logger.info(`Received WhatsApp ${messageType} from ${from} (ID: ${eventId})`);
 
     // Push to Queue for async processing
@@ -61,6 +58,9 @@ router.post('/', verifyWebhookSignature, async (req, res, next) => {
       metadata: body.entry[0].changes[0].value.metadata,
       raw: body
     });
+
+    // Mark as processed (Only after successful queuing)
+    await WebhookEvent.create({ eventId, provider: 'meta' });
 
     // Always respond 200 immediately to Meta
     res.sendStatus(200);

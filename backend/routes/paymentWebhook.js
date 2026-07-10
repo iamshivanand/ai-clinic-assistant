@@ -34,9 +34,6 @@ router.post('/razorpay', async (req, res) => {
     return res.status(200).json({ status: 'ok', duplicated: true });
   }
 
-  // Mark as processed
-  await WebhookEvent.create({ eventId, provider: 'razorpay' });
-
   const payload = req.body.payload.payment_link.entity;
 
   logger.info(`Received Razorpay event: ${event} for payment link ${payload.id}`);
@@ -98,6 +95,9 @@ router.post('/razorpay', async (req, res) => {
       logger.error('Error processing payment success webhook:', error);
     }
   }
+
+  // Mark as processed (Only after successful execution or catching and logging errors)
+  await WebhookEvent.create({ eventId, provider: 'razorpay' });
 
   res.status(200).json({ status: 'ok' });
 });

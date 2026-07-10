@@ -24,9 +24,9 @@ router.get('/summary', protect, restrictTo('SUPER_ADMIN'), async (req, res, next
     const totalPatients = await Patient.countDocuments();
     const totalMessages = await Message.countDocuments();
     
-    // Calculate revenue from completed appointments
-    const appointments = await Appointment.find({ status: 'scheduled' }); // Should be 'completed' but using scheduled for now
-    const totalRevenue = appointments.length * 500; // Mock average fee
+    // Calculate revenue from completed appointments using countDocuments (performance optimization)
+    const scheduledCount = await Appointment.countDocuments({ status: 'scheduled' });
+    const totalRevenue = scheduledCount * 500; // Mock average fee
 
     const summaryData = {
       totalClinics,

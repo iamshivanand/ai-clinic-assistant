@@ -9,7 +9,16 @@ jest.mock('../../services/prescriptionService', () => ({
 
 // Mock Patient
 jest.mock('../../models/Patient', () => ({
-  findById: jest.fn().mockResolvedValue({ name: 'John Doe', phone: '1234567890' })
+  findById: jest.fn().mockResolvedValue({ name: 'John Doe', phone: '1234567890' }),
+  findOne: jest.fn().mockResolvedValue({ _id: '5f8d0d55b54764421b7156d2', name: 'John Doe', phone: '1234567890', clinicId: 'mock-clinic' })
+}));
+
+// Mock Appointment
+jest.mock('../../models/Appointment', () => ({
+  findOne: jest.fn().mockReturnValue({
+    sort: jest.fn().mockReturnThis(),
+    then: function(resolve) { resolve({ _id: 'mock-appointment-id', save: jest.fn() }); }
+  })
 }));
 
 // Mock whatsappService

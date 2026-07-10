@@ -18,6 +18,8 @@ const UserSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+UserSchema.index({ clinicId: 1 });
+
 // Hash password before saving
 UserSchema.pre('save', async function() {
   if (!this.isModified('password')) return;

@@ -68,6 +68,34 @@ const botWorker = new Worker(
       const listId = interactive.list_reply?.id;
       const choiceId = buttonId || listId;
 
+      if (choiceId && (choiceId.startsWith('confirm_completed_') || choiceId.startsWith('confirm_missed_'))) {
+        await handleAppointmentCompletionConfirmation(from, choiceId, session);
+        return;
+      }
+
+      if (choiceId === 'google_review_done') {
+        patient.googleReviewStatus = 'completed';
+        await patient.save();
+        await whatsappService.sendTextMessage(from, 'Thank you so much for your feedback! It means a lot to us. 🙏');
+        return;
+      }
+
+      if (choiceId === 'google_review_skip') {
+        await whatsappService.sendTextMessage(from, 'No problem! Take care and stay healthy. 😊');
+        return;
+      }
+
+      if (choiceId === 'recovering_well') {
+        await whatsappService.sendTextMessage(from, 'Great to hear! Wishing you continued good health. Take care. 👋');
+        return;
+      }
+
+      if (choiceId === 'need_consultation') {
+        await whatsappService.sendTextMessage(from, 'Understood. Let us help you book a follow-up appointment with our doctors right away.');
+        await handleBookAppointment(from, session);
+        return;
+      }
+
       if (choiceId === 'book_appointment') {
         await handleBookAppointment(from, session);
         return;
@@ -138,9 +166,9 @@ async function handleBookAppointment(to, session) {
   const clinic = await getOrCreateDefaultClinic();
   const doctors = await getCachedDoctors(clinic._id);
 
-  if (!patient) {
+  if (!patient || patient.name === 'New Patient') {
     await whatsappService.sendTextMessage(to, "It looks like it's your first time here! Please tell me your full name to get started.");
-    await sessionManager.setSession(to, { step: 'AWAITING_NAME' });
+    await sessionManager.setSession(to, { step: 'AWAITING_NAME', data: { patientId: patient?._id } });
     return;
   }
 
@@ -187,7 +215,11 @@ async function handleNameInput(to, name, session) {
 
   await sessionManager.updateSession(to, { 
     step: 'SELECTING_DOCTOR', 
-    data: { tempName: name, doctors: doctors.map(d => ({ id: d._id, name: d.name })) } 
+    data: { 
+      patientId: session.data?.patientId,
+      tempName: name, 
+      doctors: doctors.map(d => ({ id: d._id, name: d.name })) 
+    } 
   });
 }
 
@@ -228,6 +260,8 @@ async function handleDateSelection(to, choiceId, session) {
     await whatsappService.sendTextMessage(to, "Please select an option using the buttons provided.");
     return;
   }
+  
+  dateObj.setUTCHours(0, 0, 0, 0);
 
   const Doctor = require('../models/Doctor');
   const doctor = await Doctor.findById(session.data.chosenDoctorId);
@@ -268,53 +302,121 @@ async function handleTimeSelection(to, choiceId, session) {
   try {
     let patientId = session.data.patientId;
 
-    // 1. Create Patient if new
+    // 1. Create Patient if new, or update name if placeholder exists
     if (!patientId) {
-      const newPatient = await Patient.create({
-        clinicId: clinic._id,
-        name: session.data.tempName,
-        phone: to
-      });
-      patientId = newPatient._id;
+      let patient = await Patient.findOne({ phone: to });
+      if (!patient) {
+        patient = await Patient.create({
+          clinicId: clinic._id,
+          name: session.data.tempName || 'New Patient',
+          phone: to
+        });
+      } else if (session.data.tempName) {
+        patient.name = session.data.tempName;
+        await patient.save();
+      }
+      patientId = patient._id;
+    } else if (session.data.tempName) {
+      await Patient.findByIdAndUpdate(patientId, { name: session.data.tempName });
     }
 
-    // 2. Create Appointment (Status is pending_payment by default)
+    // 2. Create Appointment (Status is scheduled directly)
     const appointment = await Appointment.create({
       clinicId: clinic._id,
       patientId: patientId,
       doctorId: session.data.chosenDoctorId,
       date: new Date(session.data.chosenDate),
       timeSlot: timeLabel,
+      status: 'scheduled',
+      paymentStatus: 'pending'
     });
 
-    // 2.5 Generate Payment Link
-    const paymentService = require('../services/paymentService');
-    const paymentLinkResponse = await paymentService.createPaymentLink(
-      appointment._id, 
-      doctor.consultationFee || 500,
-      {
-        name: session.data.tempName || 'Patient',
-        email: `${to}@ai-clinic.com`, // Fallback email
-        contact: to
-      }
-    );
+    // Resolve patient name
+    let patientName = session.data.tempName;
+    if (!patientName && patientId) {
+      const existingPatient = await Patient.findById(patientId);
+      patientName = existingPatient?.name;
+    }
+    patientName = patientName || 'Patient';
 
-    // Save payment link details
-    appointment.paymentId = paymentLinkResponse.id;
-    appointment.paymentLink = paymentLinkResponse.short_url;
-    await appointment.save();
+    // 2.5 Schedule Reminder and Completion Check
+    const { notificationQueue } = require('../queues');
+    const now = Date.now();
+    const apptTime = new Date(session.data.chosenDate).getTime();
+    
+    // Calculate delay for 24 hours prior to appointment
+    const reminderDelay = Math.max(apptTime - now - (24 * 60 * 60 * 1000), 10 * 1000); // 10s minimum if too close
+    await notificationQueue.add('send-reminder', {
+      appointmentId: appointment._id,
+      to,
+      patientName,
+      doctorName: session.data.chosenDoctorName,
+      time: timeLabel
+    }, { delay: reminderDelay });
 
-    // 3. Send Payment Request
-    let paymentMsg = `🗓️ Almost there! To confirm your appointment with ${session.data.chosenDoctorName} on ${session.data.dateLabel} at ${timeLabel}, please pay the consultation fee of ₹${doctor.consultationFee || 500}.\n\n💳 Pay here: ${paymentLinkResponse.short_url}\n\n*Note:* The booking will be automatically confirmed once the payment is successful.`;
+    // Calculate delay for completion check (1 hour after slot starts)
+    const followUpDelay = Math.max(apptTime - now + (1 * 60 * 60 * 1000), 30 * 1000); // 30s minimum
+    await notificationQueue.add('check-appointment-completion', {
+      appointmentId: appointment._id,
+      to,
+      patientName,
+      doctorName: session.data.chosenDoctorName,
+      time: timeLabel
+    }, { delay: followUpDelay });
 
-    await whatsappService.sendTextMessage(to, paymentMsg);
+    // 3. Send Booking Confirmation Message
+    let confirmMsg = `✅ Appointment Confirmed!\n\nYour appointment with ${session.data.chosenDoctorName} is scheduled for ${session.data.dateLabel} at ${timeLabel}.\n\n📍 Location: ${clinic.name}`;
+    if (clinic.address) {
+      confirmMsg += `, ${clinic.address}`;
+    }
+    confirmMsg += `\n\nWe look forward to seeing you!`;
+
+    await whatsappService.sendTextMessage(to, confirmMsg);
     
     // 4. Clear Session
     await sessionManager.deleteSession(to);
-    logger.info(`Payment link sent to ${to} for appointment ${appointment._id}`);
+    logger.info(`Appointment ${appointment._id} confirmed directly for ${to}`);
   } catch (error) {
     logger.error('Failed to finalize booking or create payment link:', error);
     await whatsappService.sendTextMessage(to, "I'm sorry, I encountered an error while processing your payment link. Please try again later.");
+  }
+}
+
+async function handleAppointmentCompletionConfirmation(to, choiceId, session) {
+  const isCompleted = choiceId.startsWith('confirm_completed_');
+  const appointmentId = choiceId.replace(isCompleted ? 'confirm_completed_' : 'confirm_missed_', '');
+
+  try {
+    const appointment = await Appointment.findById(appointmentId).populate('doctorId');
+    if (!appointment) {
+      await whatsappService.sendTextMessage(to, "Sorry, I couldn't find this appointment record.");
+      return;
+    }
+
+    if (isCompleted) {
+      appointment.status = 'completed';
+      await appointment.save();
+
+      const message = `Great! How are you feeling now? We hope you are recovering well. Let us know if you need anything!`;
+      await whatsappService.sendTextMessage(to, message);
+      logger.info(`Appointment ${appointmentId} confirmed completed by patient.`);
+    } else {
+      appointment.status = 'no-show';
+      await appointment.save();
+
+      const message = `We're sorry you couldn't make it to your appointment. Would you like to reschedule?`;
+      await whatsappService.sendInteractiveButtons(
+        to,
+        message,
+        [{ id: 'book_appointment', title: '📅 Book Appointment' }]
+      );
+      
+      await sessionManager.setSession(to, { step: 'IDLE' });
+      logger.info(`Appointment ${appointmentId} marked as no-show by patient. Prompted to reschedule.`);
+    }
+  } catch (err) {
+    logger.error('Error handling appointment completion confirmation:', err);
+    await whatsappService.sendTextMessage(to, "Sorry, I encountered an error processing your response.");
   }
 }
 

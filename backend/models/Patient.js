@@ -10,6 +10,7 @@ const PatientSchema = new mongoose.Schema({
   tags: [{ type: String }],
   lastVisit: { type: Date },
   isBotPaused: { type: Boolean, default: false },
+  language: { type: String, enum: ['en', 'hi'], default: 'en' },
   googleReviewStatus: {
     type: String,
     enum: ['none', 'requested', 'completed'],

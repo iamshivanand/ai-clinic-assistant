@@ -2,6 +2,32 @@ const express = require('express');
 const router = express.Router();
 const chatService = require('../services/chatService');
 const { protect } = require('../middleware/authMiddleware');
+const { z } = require('zod');
+const { validate } = require('../middleware/validate');
+
+const sendMessageSchema = z.object({
+  body: z.object({
+    patientId: z.string().min(1, 'Patient ID is required'),
+    text: z.string().min(1, 'Message text is required').max(4096, 'Message too long'),
+  }),
+});
+
+const toggleBotSchema = z.object({
+  body: z.object({
+    patientId: z.string().min(1, 'Patient ID is required'),
+    isPaused: z.boolean(),
+  }),
+});
+
+const messagesParamsSchema = z.object({
+  params: z.object({
+    patientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID'),
+  }),
+  query: z.object({
+    before: z.string().optional(),
+    limit: z.string().optional(),
+  }),
+});
 
 // GET /api/chat/patients - Get list of patients with their last message
 router.get('/patients', protect, async (req, res, next) => {
@@ -39,7 +65,7 @@ router.get('/messages/:patientId', protect, async (req, res, next) => {
 });
 
 // POST /api/chat/send - Send a manual message
-router.post('/send', protect, async (req, res, next) => {
+router.post('/send', protect, validate(sendMessageSchema), async (req, res, next) => {
   try {
     const { patientId, text } = req.body;
 
@@ -55,7 +81,7 @@ router.post('/send', protect, async (req, res, next) => {
 });
 
 // PATCH /api/chat/toggle-bot - Pause/Resume bot for patient
-router.patch('/toggle-bot', protect, async (req, res, next) => {
+router.patch('/toggle-bot', protect, validate(toggleBotSchema), async (req, res, next) => {
   try {
     const { patientId, isPaused } = req.body;
 

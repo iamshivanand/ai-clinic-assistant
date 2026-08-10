@@ -26,12 +26,16 @@ router.post('/razorpay', async (req, res) => {
   const event = req.body.event;
   const eventId = req.body.id; // Razorpay event ID
 
-  // Idempotency Check
+  // Atomic idempotency check — uses unique index on eventId
   const WebhookEvent = require('../models/WebhookEvent');
-  const alreadyProcessed = await WebhookEvent.findOne({ eventId });
-  if (alreadyProcessed) {
-    logger.info(`Webhook event ${eventId} already processed. Skipping.`);
-    return res.status(200).json({ status: 'ok', duplicated: true });
+  try {
+    await WebhookEvent.create({ eventId, provider: 'razorpay' });
+  } catch (err) {
+    if (err.code === 11000) {
+      logger.info(`Duplicate payment event ${eventId} - already processed`);
+      return res.status(200).send('Duplicate event');
+    }
+    throw err;
   }
 
   const payload = req.body.payload.payment_link.entity;
@@ -95,9 +99,6 @@ router.post('/razorpay', async (req, res) => {
       logger.error('Error processing payment success webhook:', error);
     }
   }
-
-  // Mark as processed (Only after successful execution or catching and logging errors)
-  await WebhookEvent.create({ eventId, provider: 'razorpay' });
 
   res.status(200).json({ status: 'ok' });
 });

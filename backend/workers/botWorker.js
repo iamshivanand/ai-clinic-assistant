@@ -10,6 +10,16 @@ const Message = require('../models/Message');
 const { getOrCreateDefaultClinic } = require('../utils/clinicHelper');
 const redis = require('../utils/redis');
 const Doctor = require('../models/Doctor');
+const { detectLanguage, isHindiGreeting, isHindiBooking } = require('../lang/detect');
+const hi = require('../lang/hi');
+const en = require('../lang/en');
+
+function t(patient, key, ...args) {
+  const lang = patient?.language || 'en';
+  const strings = lang === 'hi' ? hi : en;
+  const val = strings[key];
+  return typeof val === 'function' ? val(...args) : val;
+}
 
 async function getCachedDoctors(clinicId) {
   const cacheKey = `clinic:${clinicId}:doctors`;
@@ -17,7 +27,7 @@ async function getCachedDoctors(clinicId) {
   if (cached) return JSON.parse(cached);
 
   const doctors = await Doctor.find({ clinicId, isActive: true });
-  await redis.setex(cacheKey, 3600, JSON.stringify(doctors)); // 1 hour cache
+  await redis.setex(cacheKey, 3600, JSON.stringify(doctors));
   return doctors;
 }
 
@@ -27,26 +37,24 @@ const botWorker = new Worker(
     const { from, messageBody, messageType, raw } = job.data;
     logger.info(`Processing ${messageType} from ${from}`);
 
-    // 1. Get or Create Session
     let session = await sessionManager.getSession(from);
     if (!session) {
       session = { step: 'IDLE', data: {} };
     }
 
-    // 1.5 Sync Patient & Save Message
     const clinic = await getOrCreateDefaultClinic();
     let patient = await Patient.findOne({ phone: from });
-    
-    // If patient doesn't exist yet, we'll create a placeholder record
+
     if (!patient) {
+      const detectedLang = detectLanguage(messageBody);
       patient = await Patient.create({
         clinicId: clinic._id,
         phone: from,
-        name: 'New Patient' // Temporary name
+        name: 'New Patient',
+        language: detectedLang,
       });
     }
 
-    // Save incoming message to DB
     await Message.create({
       clinicId: clinic._id,
       patientId: patient._id,
@@ -61,7 +69,6 @@ const botWorker = new Worker(
       return;
     }
 
-    // 2. Handle Interactive Messages (Buttons/Lists)
     if (messageType === 'interactive') {
       const interactive = raw.entry[0].changes[0].value.messages[0].interactive;
       const buttonId = interactive.button_reply?.id;
@@ -69,80 +76,88 @@ const botWorker = new Worker(
       const choiceId = buttonId || listId;
 
       if (choiceId && (choiceId.startsWith('confirm_completed_') || choiceId.startsWith('confirm_missed_'))) {
-        await handleAppointmentCompletionConfirmation(from, choiceId, session);
+        await handleAppointmentCompletionConfirmation(from, choiceId, session, patient);
         return;
       }
 
       if (choiceId === 'google_review_done') {
         patient.googleReviewStatus = 'completed';
         await patient.save();
-        await whatsappService.sendTextMessage(from, 'Thank you so much for your feedback! It means a lot to us. 🙏');
+        const msg = patient.language === 'hi' ? hi.reviewDoneResponse : en.reviewDoneResponse;
+        await whatsappService.sendTextMessage(from, msg);
         return;
       }
 
       if (choiceId === 'google_review_skip') {
-        await whatsappService.sendTextMessage(from, 'No problem! Take care and stay healthy. 😊');
+        const msg = patient.language === 'hi' ? hi.reviewSkipResponse : en.reviewSkipResponse;
+        await whatsappService.sendTextMessage(from, msg);
         return;
       }
 
       if (choiceId === 'recovering_well') {
-        await whatsappService.sendTextMessage(from, 'Great to hear! Wishing you continued good health. Take care. 👋');
+        const msg = patient.language === 'hi' ? hi.recoveringWellResponse : en.recoveringWellResponse;
+        await whatsappService.sendTextMessage(from, msg);
         return;
       }
 
       if (choiceId === 'need_consultation') {
-        await whatsappService.sendTextMessage(from, 'Understood. Let us help you book a follow-up appointment with our doctors right away.');
-        await handleBookAppointment(from, session);
+        const msg = patient.language === 'hi' ? hi.needConsultationResponse : en.needConsultationResponse;
+        await whatsappService.sendTextMessage(from, msg);
+        await handleBookAppointment(from, session, patient);
         return;
       }
 
       if (choiceId === 'book_appointment') {
-        await handleBookAppointment(from, session);
+        await handleBookAppointment(from, session, patient);
         return;
       }
 
       if (session.step === 'SELECTING_DOCTOR' && choiceId) {
-        await handleDoctorSelection(from, choiceId, session);
+        await handleDoctorSelection(from, choiceId, session, patient);
         return;
       }
 
       if (session.step === 'SELECTING_DATE' && choiceId) {
-        await handleDateSelection(from, choiceId, session);
+        await handleDateSelection(from, choiceId, session, patient);
         return;
       }
 
       if (session.step === 'SELECTING_TIME' && choiceId) {
-        await handleTimeSelection(from, choiceId, session);
+        await handleTimeSelection(from, choiceId, session, patient);
         return;
       }
     }
 
-    // 3. Handle Text Messages & State Transitions
+    const lang = patient.language || 'en';
+    const strings = lang === 'hi' ? require('../lang/hi') : require('../lang/en');
+
     switch (session.step) {
-      case 'IDLE':
-        if (messageBody.toLowerCase().includes('hi') || messageBody.toLowerCase().includes('hello')) {
-          await sendWelcomeMessage(from);
-        } else if (messageBody.toLowerCase().includes('book')) {
-          await handleBookAppointment(from, session);
+      case 'IDLE': {
+        const { isHindiGreeting, isHindiBooking } = require('../lang/detect');
+        if (isHindiGreeting(messageBody) || messageBody.toLowerCase().includes('hi') || messageBody.toLowerCase().includes('hello')) {
+          await sendWelcomeMessage(from, patient);
+        } else if (isHindiBooking(messageBody) || messageBody.toLowerCase().includes('book')) {
+          await handleBookAppointment(from, session, patient);
         } else {
-          await whatsappService.sendTextMessage(from, "I'm sorry, I didn't quite get that. Reply with 'Hi' to start.");
+          await whatsappService.sendTextMessage(from, strings.fallback);
         }
         break;
+      }
 
       case 'AWAITING_NAME':
-        await handleNameInput(from, messageBody, session);
+        await handleNameInput(from, messageBody, session, patient);
         break;
 
       case 'SELECTING_DOCTOR':
-        await handleDoctorSelection(from, messageBody, session);
+        await handleDoctorSelection(from, messageBody, session, patient);
         break;
 
       case 'SELECTING_DATE':
-        await handleDateSelection(from, messageBody, session);
+        await handleDateSelection(from, messageBody, session, patient);
         break;
 
       case 'SELECTING_TIME':
-        await handleTimeSelection(from, messageBody, session);
+        await handleTimeSelection(from, messageBody, session, patient);
         break;
 
       default:
@@ -152,28 +167,29 @@ const botWorker = new Worker(
   { connection }
 );
 
-async function sendWelcomeMessage(to) {
+async function sendWelcomeMessage(to, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   await whatsappService.sendInteractiveButtons(
-    to, 
-    "Welcome to AI Clinic! 👋\n\nHow can I help you today?",
-    [{ id: 'book_appointment', title: '📅 Book Appointment' }]
+    to,
+    strings.welcome,
+    strings.welcomeButtons
   );
   await sessionManager.setSession(to, { step: 'IDLE' });
 }
 
-async function handleBookAppointment(to, session) {
-  const patient = await Patient.findOne({ phone: to });
+async function handleBookAppointment(to, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   const clinic = await getOrCreateDefaultClinic();
   const doctors = await getCachedDoctors(clinic._id);
 
   if (!patient || patient.name === 'New Patient') {
-    await whatsappService.sendTextMessage(to, "It looks like it's your first time here! Please tell me your full name to get started.");
+    await whatsappService.sendTextMessage(to, strings.askName);
     await sessionManager.setSession(to, { step: 'AWAITING_NAME', data: { patientId: patient?._id } });
     return;
   }
 
   if (doctors.length === 0) {
-    await whatsappService.sendTextMessage(to, "I'm sorry, no doctors are currently available. Please try again later.");
+    await whatsappService.sendTextMessage(to, strings.noDoctors);
     return;
   }
 
@@ -185,18 +201,19 @@ async function handleBookAppointment(to, session) {
 
   await whatsappService.sendInteractiveList(
     to,
-    "Please select a specialist you'd like to book with:",
-    "Select Doctor",
-    [{ title: "Available Specialists", rows }]
+    strings.selectDoctor,
+    strings.selectDoctorButton,
+    [{ title: strings.availableSpecialists, rows }]
   );
 
-  await sessionManager.setSession(to, { 
-    step: 'SELECTING_DOCTOR', 
-    data: { patientId: patient._id, doctors: doctors.map(d => ({ id: d._id, name: d.name })) } 
+  await sessionManager.setSession(to, {
+    step: 'SELECTING_DOCTOR',
+    data: { patientId: patient._id, doctors: doctors.map(d => ({ id: d._id, name: d.name })) }
   });
 }
 
-async function handleNameInput(to, name, session) {
+async function handleNameInput(to, name, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   const clinic = await getOrCreateDefaultClinic();
   const doctors = await getCachedDoctors(clinic._id);
 
@@ -208,66 +225,68 @@ async function handleNameInput(to, name, session) {
 
   await whatsappService.sendInteractiveList(
     to,
-    `Thanks, ${name}! Please select a specialist:`,
-    "Select Doctor",
-    [{ title: "Available Specialists", rows }]
+    strings.thanksName(name),
+    strings.selectDoctorButton,
+    [{ title: strings.availableSpecialists, rows }]
   );
 
-  await sessionManager.updateSession(to, { 
-    step: 'SELECTING_DOCTOR', 
-    data: { 
+  await sessionManager.updateSession(to, {
+    step: 'SELECTING_DOCTOR',
+    data: {
       patientId: session.data?.patientId,
-      tempName: name, 
-      doctors: doctors.map(d => ({ id: d._id, name: d.name })) 
-    } 
+      tempName: name,
+      doctors: doctors.map(d => ({ id: d._id, name: d.name }))
+    }
   });
 }
 
-async function handleDoctorSelection(to, choiceId, session) {
+async function handleDoctorSelection(to, choiceId, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   const doctor = session.data.doctors.find(d => d.id === choiceId);
 
   if (!doctor) {
-    await whatsappService.sendTextMessage(to, "Please select a doctor from the list provided.");
+    await whatsappService.sendTextMessage(to, strings.selectDoctorPrompt);
     return;
   }
 
   await whatsappService.sendInteractiveButtons(
     to,
-    `Excellent. You've chosen ${doctor.name}. Which date would you like to visit?`,
+    strings.doctorChosen(doctor.name),
     [
-      { id: 'date_tomorrow', title: 'Tomorrow' },
-      { id: 'date_day_after', title: 'Day after tomorrow' }
+      { id: 'date_tomorrow', title: strings.tomorrow },
+      { id: 'date_day_after', title: strings.dayAfter }
     ]
   );
 
-  await sessionManager.updateSession(to, { 
-    step: 'SELECTING_DATE', 
-    data: { ...session.data, chosenDoctorId: doctor.id, chosenDoctorName: doctor.name } 
+  await sessionManager.updateSession(to, {
+    step: 'SELECTING_DATE',
+    data: { ...session.data, chosenDoctorId: doctor.id, chosenDoctorName: doctor.name }
   });
 }
 
-async function handleDateSelection(to, choiceId, session) {
+async function handleDateSelection(to, choiceId, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   let dateLabel = '';
   let dateObj = new Date();
 
   if (choiceId === 'date_tomorrow') {
-    dateLabel = 'Tomorrow';
+    dateLabel = strings.tomorrow;
     dateObj.setDate(dateObj.getDate() + 1);
   } else if (choiceId === 'date_day_after') {
-    dateLabel = 'Day after tomorrow';
+    dateLabel = strings.dayAfter;
     dateObj.setDate(dateObj.getDate() + 2);
   } else {
-    await whatsappService.sendTextMessage(to, "Please select an option using the buttons provided.");
+    await whatsappService.sendTextMessage(to, strings.selectDatePrompt);
     return;
   }
-  
+
   dateObj.setUTCHours(0, 0, 0, 0);
 
   const Doctor = require('../models/Doctor');
   const doctor = await Doctor.findById(session.data.chosenDoctorId);
-  
+
   const slots = doctor?.availableSlots || ['10:00 AM', '11:30 AM', '02:00 PM', '04:30 PM'];
-  
+
   const rows = slots.map((slot, index) => ({
     id: `slot_${index}`,
     title: slot
@@ -275,41 +294,42 @@ async function handleDateSelection(to, choiceId, session) {
 
   await whatsappService.sendInteractiveList(
     to,
-    `Great! What time works best for your appointment with ${session.data.chosenDoctorName} on ${dateLabel}?`,
-    "Select Time Slot",
-    [{ title: "Available Slots", rows }]
+    strings.selectTime(session.data.chosenDoctorName, dateLabel),
+    strings.selectTimeButton,
+    [{ title: strings.availableSlots, rows }]
   );
 
-  await sessionManager.updateSession(to, { 
-    step: 'SELECTING_TIME', 
-    data: { ...session.data, chosenDate: dateObj.toISOString(), dateLabel, slots } 
+  await sessionManager.updateSession(to, {
+    step: 'SELECTING_TIME',
+    data: { ...session.data, chosenDate: dateObj.toISOString(), dateLabel, slots }
   });
 }
 
-async function handleTimeSelection(to, choiceId, session) {
+async function handleTimeSelection(to, choiceId, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   const clinic = await getOrCreateDefaultClinic();
   const doctor = await Doctor.findById(session.data.chosenDoctorId);
-  
+
   const slots = session.data.slots || ['10:00 AM', '11:30 AM', '02:00 PM', '04:30 PM'];
   const choiceIndex = parseInt(choiceId.replace('slot_', ''));
   const timeLabel = slots[choiceIndex];
 
   if (!timeLabel) {
-    await whatsappService.sendTextMessage(to, "Please select a time slot from the list provided.");
+    await whatsappService.sendTextMessage(to, strings.selectTimePrompt);
     return;
   }
 
   try {
     let patientId = session.data.patientId;
 
-    // 1. Create Patient if new, or update name if placeholder exists
     if (!patientId) {
       let patient = await Patient.findOne({ phone: to });
       if (!patient) {
         patient = await Patient.create({
           clinicId: clinic._id,
           name: session.data.tempName || 'New Patient',
-          phone: to
+          phone: to,
+          language: patient.language || 'en',
         });
       } else if (session.data.tempName) {
         patient.name = session.data.tempName;
@@ -320,7 +340,20 @@ async function handleTimeSelection(to, choiceId, session) {
       await Patient.findByIdAndUpdate(patientId, { name: session.data.tempName });
     }
 
-    // 2. Create Appointment (Status is scheduled directly)
+    const existingAppt = await Appointment.findOne({
+      clinicId: clinic._id,
+      doctorId: session.data.chosenDoctorId,
+      date: new Date(session.data.chosenDate),
+      timeSlot: timeLabel,
+      status: { $in: ['scheduled', 'pending_payment'] }
+    });
+    if (existingAppt) {
+      logger.warn(`Double-booking prevented for slot ${timeLabel} on ${session.data.chosenDate}`);
+      await whatsappService.sendTextMessage(to, strings.slotTaken || "I'm sorry, this time slot has just been booked by another patient. Please select a different time.");
+      await sessionManager.updateSession(to, { step: 'SELECTING_TIME', data: session.data });
+      return;
+    }
+
     const appointment = await Appointment.create({
       clinicId: clinic._id,
       patientId: patientId,
@@ -331,7 +364,6 @@ async function handleTimeSelection(to, choiceId, session) {
       paymentStatus: 'pending'
     });
 
-    // Resolve patient name
     let patientName = session.data.tempName;
     if (!patientName && patientId) {
       const existingPatient = await Patient.findById(patientId);
@@ -339,50 +371,56 @@ async function handleTimeSelection(to, choiceId, session) {
     }
     patientName = patientName || 'Patient';
 
-    // 2.5 Schedule Reminder and Completion Check
     const { notificationQueue } = require('../queues');
     const now = Date.now();
     const apptTime = new Date(session.data.chosenDate).getTime();
-    
-    // Calculate delay for 24 hours prior to appointment
-    const reminderDelay = Math.max(apptTime - now - (24 * 60 * 60 * 1000), 10 * 1000); // 10s minimum if too close
+
+    const reminderDelay = Math.max(apptTime - now - (24 * 60 * 60 * 1000), 10 * 1000);
     await notificationQueue.add('send-reminder', {
       appointmentId: appointment._id,
       to,
       patientName,
       doctorName: session.data.chosenDoctorName,
-      time: timeLabel
+      time: timeLabel,
+      language: patient.language,
     }, { delay: reminderDelay });
 
-    // Calculate delay for completion check (1 hour after slot starts)
-    const followUpDelay = Math.max(apptTime - now + (1 * 60 * 60 * 1000), 30 * 1000); // 30s minimum
+    const followUpDelay = Math.max(apptTime - now + (1 * 60 * 60 * 1000), 30 * 1000);
     await notificationQueue.add('check-appointment-completion', {
       appointmentId: appointment._id,
       to,
       patientName,
       doctorName: session.data.chosenDoctorName,
-      time: timeLabel
+      time: timeLabel,
+      language: patient.language,
     }, { delay: followUpDelay });
 
-    // 3. Send Booking Confirmation Message
-    let confirmMsg = `✅ Appointment Confirmed!\n\nYour appointment with ${session.data.chosenDoctorName} is scheduled for ${session.data.dateLabel} at ${timeLabel}.\n\n📍 Location: ${clinic.name}`;
-    if (clinic.address) {
-      confirmMsg += `, ${clinic.address}`;
-    }
-    confirmMsg += `\n\nWe look forward to seeing you!`;
+    const confirmMsg = strings.confirmAppointment(
+      session.data.chosenDoctorName,
+      session.data.dateLabel,
+      timeLabel,
+      clinic.name,
+      clinic.address
+    );
 
     await whatsappService.sendTextMessage(to, confirmMsg);
-    
-    // 4. Clear Session
+
     await sessionManager.deleteSession(to);
     logger.info(`Appointment ${appointment._id} confirmed directly for ${to}`);
   } catch (error) {
-    logger.error('Failed to finalize booking or create payment link:', error);
-    await whatsappService.sendTextMessage(to, "I'm sorry, I encountered an error while processing your payment link. Please try again later.");
+    if (error.code === 11000) {
+      logger.warn(`Duplicate key error - double booking prevented for slot ${timeLabel}`);
+      await whatsappService.sendTextMessage(to, strings.slotTaken || "I'm sorry, this time slot has just been booked by another patient. Please select a different time.");
+      await sessionManager.updateSession(to, { step: 'SELECTING_TIME', data: session.data });
+      return;
+    }
+    logger.error('Failed to finalize booking:', error);
+    await whatsappService.sendTextMessage(to, strings.error);
   }
 }
 
-async function handleAppointmentCompletionConfirmation(to, choiceId, session) {
+async function handleAppointmentCompletionConfirmation(to, choiceId, session, patient) {
+  const strings = patient.language === 'hi' ? require('../lang/hi') : require('../lang/en');
   const isCompleted = choiceId.startsWith('confirm_completed_');
   const appointmentId = choiceId.replace(isCompleted ? 'confirm_completed_' : 'confirm_missed_', '');
 
@@ -397,26 +435,24 @@ async function handleAppointmentCompletionConfirmation(to, choiceId, session) {
       appointment.status = 'completed';
       await appointment.save();
 
-      const message = `Great! How are you feeling now? We hope you are recovering well. Let us know if you need anything!`;
-      await whatsappService.sendTextMessage(to, message);
+      await whatsappService.sendTextMessage(to, strings.completedResponse);
       logger.info(`Appointment ${appointmentId} confirmed completed by patient.`);
     } else {
       appointment.status = 'no-show';
       await appointment.save();
 
-      const message = `We're sorry you couldn't make it to your appointment. Would you like to reschedule?`;
       await whatsappService.sendInteractiveButtons(
         to,
-        message,
-        [{ id: 'book_appointment', title: '📅 Book Appointment' }]
+        strings.missedResponse,
+        [{ id: 'book_appointment', title: strings.bookAppointment }]
       );
-      
+
       await sessionManager.setSession(to, { step: 'IDLE' });
       logger.info(`Appointment ${appointmentId} marked as no-show by patient. Prompted to reschedule.`);
     }
   } catch (err) {
     logger.error('Error handling appointment completion confirmation:', err);
-    await whatsappService.sendTextMessage(to, "Sorry, I encountered an error processing your response.");
+    await whatsappService.sendTextMessage(to, strings.error);
   }
 }
 

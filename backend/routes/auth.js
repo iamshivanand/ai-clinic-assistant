@@ -8,12 +8,14 @@ const validate = require('../middleware/validate');
 const logger = require('../utils/logger');
 
 const router = express.Router();
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  logger.error('FATAL ERROR: JWT_SECRET is not defined.');
-  process.exit(1);
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('FATAL: JWT_SECRET not set in production');
+    process.exit(1);
+  }
+  JWT_SECRET = 'dev_secret_key_12345';
 }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_12345';
 
 const signToken = (id) => {
   return jwt.sign({ id }, JWT_SECRET, {
@@ -64,8 +66,9 @@ router.post('/register', validate(registerSchema), async (req, res, next) => {
 router.post('/login', validate(loginSchema), async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
 
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user || !(await user.comparePassword(password))) {
       return next(new AppError('Incorrect email or password', 401, 'INVALID_CREDENTIALS'));
     }

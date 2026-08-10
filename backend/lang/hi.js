@@ -1,0 +1,53 @@
+const hi = {
+  welcome: "AI Clinic में आपका स्वागत है! 👋\n\nमैं आपकी कैसे मदद कर सकता हूँ?",
+  bookAppointment: "📅 अपॉइंटमेंट बुक करें",
+  greeting: "नमस्ते! मैं AI Clinic का वर्चुअल रिसेप्शनिस्ट हूँ।",
+  askName: "लगता है आप पहली बार आए हैं! कृपया अपना पूरा नाम बताएं।",
+  thanksName: (name) => `धन्यवाद, ${name}! कृपया एक डॉक्टर चुनें:`,
+  selectDoctor: "कृपया वह विशेषज्ञ चुनें जिससे आप अपॉइंटमेंट बुक करना चाहते हैं:",
+  selectDoctorButton: "डॉक्टर चुनें",
+  availableSpecialists: "उपलब्ध विशेषज्ञ",
+  noDoctors: "क्षमा करें, अभी कोई डॉक्टर उपलब्ध नहीं है। कृपया बाद में प्रयास करें।",
+  doctorChosen: (name) => `बहुत अच्छा। आपने ${name} को चुना है। किस तारीख को आना चाहेंगे?`,
+  tomorrow: "कल",
+  dayAfter: "परसों",
+  selectTime: (doctorName, dateLabel) => `बहुत अच्छा! ${doctorName} के साथ ${dateLabel} के लिए कौन सा समय सुविधाजनक रहेगा?`,
+  selectTimeButton: "समय चुनें",
+  availableSlots: "उपलब्ध समय स्लॉट",
+  selectDoctorPrompt: "कृपया सूची में से एक डॉक्टर चुनें।",
+  selectDatePrompt: "कृपया दिए गए विकल्पों में से एक तारीख चुनें।",
+  selectTimePrompt: "कृपया सूची में से एक समय चुनें।",
+  fallback: "क्षमा करें, मैं समझ नहीं पाया। कृपया 'नमस्ते' लिखकर शुरू करें या 'बुक' लिखकर अपॉइंटमेंट बुक करें।",
+  fallbackHi: "क्षमा करें, मैं समझ नहीं पाया। कृपया 'नमस्ते' लिखकर शुरू करें।",
+  welcomeButtons: [{ id: 'book_appointment', title: '📅 अपॉइंटमेंट बुक करें' }],
+  confirmAppointment: (doctorName, dateLabel, time, clinicName, address) => {
+    let msg = `✅ अपॉइंटमेंट कन्फर्म हुआ!\n\nआपका अपॉइंटमेंट ${doctorName} के साथ ${dateLabel} को ${time} पर बुक हो गया है।\n\n📍 स्थान: ${clinicName}`;
+    if (address) msg += `, ${address}`;
+    msg += `\n\nहम आपकी प्रतीक्षा कर रहे होंगे!`;
+    return msg;
+  },
+  error: "क्षमा करें, कुछ त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।",
+  paymentError: "क्षमा करें, भुगतान लिंक बनाने में त्रुटि हुई। कृपया बाद में पुनः प्रयास करें।",
+  reminder: (patientName, doctorName, time) => `नमस्ते ${patientName}! 👋\n\nयह आपके अपॉइंटमेंट की याद दिलाने का संदेश है। आपका ${doctorName} के साथ ${time} पर अपॉइंटमेंट है।\n\nहम आपकी प्रतीक्षा कर रहे होंगे!`,
+  postCare: (patientName) => `नमस्ते ${patientName}! 👋 आज के परामर्श के बाद आप कैसा महसूस कर रहे हैं?`,
+  recoveringWell: "ठीक हो रहा हूँ",
+  needConsultation: "परामर्श चाहिए",
+  recoveringWellResponse: "यह सुनकर अच्छा लगा! हम आपके अच्छे स्वास्थ्य की कामना करते हैं। अपना ध्यान रखें। 👋",
+  needConsultationResponse: "समझ गया। आइए हम आपके लिए तुरंत फॉलो-अप अपॉइंटमेंट बुक करवाते हैं।",
+  completionCheck: (patientName, doctorName) => `नमस्ते ${patientName}! 👋 हम जानना चाहते थे कि क्या ${doctorName} के साथ आपका आज का अपॉइंटमेंट सफल रहा?`,
+  completed: "हाँ, हो गया",
+  missed: "नहीं, मिस हो गया",
+  completedResponse: "बहुत अच्छा! अब आप कैसा महसूस कर रहे हैं? हमें उम्मीद है कि आप जल्दी ठीक हो जाएंगे।",
+  missedResponse: "हमें खेद है कि आप अपॉइंटमेंट पर नहीं आ सके। क्या आप दोबारा अपॉइंटमेंट बुक करना चाहेंगे?",
+  reviewRequest: (name) => `नमस्ते ${name}! 👋 हमें उम्मीद है कि आप ठीक हो रहे हैं। क्या आप Google पर हमारे क्लिनिक के लिए रिव्यू छोड़ना चाहेंगे? इससे दूसरों को हमें ढूंढने में मदद मिलती है!`,
+  reviewDone: "रिव्यू दे दिया है",
+  reviewSkip: "बाद में",
+  reviewDoneResponse: "आपकी प्रतिक्रिया के लिए बहुत-बहुत धन्यवाद! यह हमारे लिए बहुत मायने रखता है। 🙏",
+  reviewSkipResponse: "कोई बात नहीं! अपना ध्यान रखें और स्वस्थ रहें। 😊",
+  languagePrompt: "कृपया अपनी भाषा चुनें / Please select your language:",
+  hindiSelected: "आपने हिंदी भाषा चुन ली है। अब मैं हिंदी में बात करूंगा।",
+  englishSelected: "You have selected English. I will now speak in English.",
+  selectLanguage: "भाषा चुनें",
+};
+
+module.exports = hi;

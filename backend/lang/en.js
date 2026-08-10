@@ -1,0 +1,53 @@
+const en = {
+  welcome: "Welcome to AI Clinic! 👋\n\nHow can I help you today?",
+  bookAppointment: "📅 Book Appointment",
+  greeting: "Hello! I'm the AI Clinic virtual receptionist.",
+  askName: "It looks like it's your first time here! Please tell me your full name to get started.",
+  thanksName: (name) => `Thanks, ${name}! Please select a specialist:`,
+  selectDoctor: "Please select a specialist you'd like to book with:",
+  selectDoctorButton: "Select Doctor",
+  availableSpecialists: "Available Specialists",
+  noDoctors: "I'm sorry, no doctors are currently available. Please try again later.",
+  doctorChosen: (name) => `Excellent. You've chosen ${name}. Which date would you like to visit?`,
+  tomorrow: "Tomorrow",
+  dayAfter: "Day after tomorrow",
+  selectTime: (doctorName, dateLabel) => `Great! What time works best for your appointment with ${doctorName} on ${dateLabel}?`,
+  selectTimeButton: "Select Time Slot",
+  availableSlots: "Available Slots",
+  selectDoctorPrompt: "Please select a doctor from the list provided.",
+  selectDatePrompt: "Please select an option using the buttons provided.",
+  selectTimePrompt: "Please select a time slot from the list provided.",
+  fallback: "I'm sorry, I didn't quite get that. Reply with 'Hi' to start.",
+  fallbackHi: "I'm sorry, I didn't quite get that. Reply with 'Hi' to start.",
+  welcomeButtons: [{ id: 'book_appointment', title: '📅 Book Appointment' }],
+  confirmAppointment: (doctorName, dateLabel, time, clinicName, address) => {
+    let msg = `✅ Appointment Confirmed!\n\nYour appointment with ${doctorName} is scheduled for ${dateLabel} at ${time}.\n\n📍 Location: ${clinicName}`;
+    if (address) msg += `, ${address}`;
+    msg += `\n\nWe look forward to seeing you!`;
+    return msg;
+  },
+  error: "I'm sorry, I encountered an error. Please try again later.",
+  paymentError: "I'm sorry, I encountered an error while processing your payment link. Please try again later.",
+  reminder: (patientName, doctorName, time) => `Hello ${patientName}! 👋\n\nThis is a friendly reminder for your appointment with ${doctorName} at ${time}.\n\nWe look forward to seeing you!`,
+  postCare: (patientName) => `Hello ${patientName}! 👋 How are you feeling now after your consultation today?`,
+  recoveringWell: "Recovering Well",
+  needConsultation: "Need Consultation",
+  recoveringWellResponse: "Great to hear! Wishing you continued good health. Take care. 👋",
+  needConsultationResponse: "Understood. Let us help you book a follow-up appointment with our doctors right away.",
+  completionCheck: (patientName, doctorName) => `Hi ${patientName}! 👋 We wanted to check if your scheduled consultation with ${doctorName} today was completed successfully?`,
+  completed: "Yes, it was",
+  missed: "No, I missed it",
+  completedResponse: "Great! How are you feeling now? We hope you are recovering well.",
+  missedResponse: "We're sorry you couldn't make it to your appointment. Would you like to reschedule?",
+  reviewRequest: (name) => `Hi ${name}! 👋 We hope you are recovering well. Would you mind leaving a review for our clinic on Google? It helps others find us!`,
+  reviewDone: "I've left a review",
+  reviewSkip: "Maybe later",
+  reviewDoneResponse: "Thank you so much for your feedback! It means a lot to us. 🙏",
+  reviewSkipResponse: "No problem! Take care and stay healthy. 😊",
+  languagePrompt: "कृपया अपनी भाषा चुनें / Please select your language:",
+  hindiSelected: "आपने हिंदी भाषा चुन ली है। अब मैं हिंदी में बात करूंगा।",
+  englishSelected: "You have selected English. I will now speak in English.",
+  selectLanguage: "भाषा चुनें / Select Language",
+};
+
+module.exports = en;

@@ -2,13 +2,14 @@ import React, { useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import useAuthStore from './store/useAuthStore';
 
-// Components and Layouts
 const AdminLayout = lazy(() => import('./components/AdminLayout'));
 const ProtectedRoute = lazy(() => import('./components/ProtectedRoute'));
 
-// Pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const SuperAdminAnalytics = lazy(() => import('./pages/SuperAdminAnalytics'));
+const SuperAdminClinics = lazy(() => import('./pages/SuperAdminClinics'));
+const SuperAdminCreateClinic = lazy(() => import('./pages/SuperAdminCreateClinic'));
+const SuperAdminClinicDetail = lazy(() => import('./pages/SuperAdminClinicDetail'));
 const Chat = lazy(() => import('./pages/Chat'));
 const WhatsAppSetup = lazy(() => import('./pages/WhatsAppSetup'));
 const Unauthorized = lazy(() => import('./pages/Unauthorized'));
@@ -177,6 +178,9 @@ function App() {
             }
           >
             <Route index element={<SuperAdminAnalytics />} />
+            <Route path="clinics" element={<SuperAdminClinics />} />
+            <Route path="clinics/:id" element={<SuperAdminClinicDetail />} />
+            <Route path="create-clinic" element={<SuperAdminCreateClinic />} />
           </Route>
         </Routes>
       </Suspense>

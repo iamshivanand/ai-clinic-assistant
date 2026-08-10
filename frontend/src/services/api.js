@@ -48,4 +48,11 @@ export const toggleBot = (patientId, isPaused) => api.patch('/chat/toggle-bot', 
 export const getAnalyticsSummary = () => api.get('/analytics/summary');
 export const getAnalyticsCharts = () => api.get('/analytics/charts');
 
+// Admin API
+export const getAdminClinics = () => api.get('/admin/clinics');
+export const getAdminClinicDetail = (id) => api.get(`/admin/clinics/${id}`);
+export const createAdminClinic = (data) => api.post('/admin/clinics', data);
+export const updateAdminClinic = (id, data) => api.patch(`/admin/clinics/${id}`, data);
+export const getAdminAnalyticsSummary = () => api.get('/admin/analytics/summary');
+
 export default api;

@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: { type: String, required: true, select: false },
   role: { 
     type: String, 
     enum: ['DOCTOR', 'SUPER_ADMIN'], 
@@ -19,6 +19,14 @@ const UserSchema = new mongoose.Schema({
 });
 
 UserSchema.index({ clinicId: 1 });
+
+// Normalize email before saving
+UserSchema.pre('save', function(next) {
+  if (this.email) {
+    this.email = this.email.toLowerCase().trim();
+  }
+  next();
+});
 
 // Hash password before saving
 UserSchema.pre('save', async function() {

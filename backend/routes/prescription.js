@@ -5,10 +5,26 @@ const whatsappService = require('../services/whatsappService');
 const Patient = require('../models/Patient');
 const { protect } = require('../middleware/authMiddleware');
 const logger = require('../utils/logger');
+const { z } = require('zod');
+const { validate } = require('../middleware/validate');
+
+const prescriptionSchema = z.object({
+  body: z.object({
+    patientId: z.string().min(1, 'Patient ID is required'),
+    diagnosis: z.string().optional(),
+    medicines: z.array(z.object({
+      name: z.string().optional(),
+      dosage: z.string().optional(),
+      duration: z.string().optional(),
+    })).optional(),
+    notes: z.string().optional(),
+    isBlank: z.boolean().optional(),
+  }),
+});
 
 const { notificationQueue } = require('../queues');
 
-router.post('/generate-and-send', protect, async (req, res, next) => {
+router.post('/generate-and-send', protect, validate(prescriptionSchema), async (req, res, next) => {
   try {
     const { patientId, diagnosis, medicines, isBlank } = req.body;
     

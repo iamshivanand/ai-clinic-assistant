@@ -16,6 +16,14 @@ const ClinicSchema = new mongoose.Schema({
     enum: ['basic', 'pro'],
     default: 'basic'
   },
+  metaAccessToken: { type: String },
+  wabaId: { type: String },
+  phoneNumberId: { type: String },
+  onboardingStatus: {
+    type: String,
+    enum: ['PENDING', 'CONNECTED', 'DISCONNECTED'],
+    default: 'PENDING'
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

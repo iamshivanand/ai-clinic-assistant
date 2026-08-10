@@ -31,6 +31,7 @@ const getMockPatient = (overrides = {}) => {
     name: 'Mock Patient Bob',
     phone: '9999999999',
     isBotPaused: false,
+  language: 'en',
     ...overrides
   };
 };

@@ -4,12 +4,14 @@ const { AppError } = require('./errorHandler');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  logger.error('FATAL ERROR: JWT_SECRET is not defined.');
-  process.exit(1);
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    logger.error('FATAL: JWT_SECRET not set in production');
+    process.exit(1);
+  }
+  JWT_SECRET = 'dev_secret_key_12345';
 }
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_12345';
 
 const protect = async (req, res, next) => {
   try {

@@ -13,13 +13,18 @@ import {
   Bell,
   CheckCircle2,
   ChevronLeft,
-  Menu
+  Menu,
+  Activity,
+  Building2,
+  UserPlus,
+  ClipboardList,
 } from 'lucide-react';
 
 const SidebarLink = ({ to, icon: Icon, isCollapsed, children }) => (
   <NavLink 
     to={to} 
-    className="sidebar-link" 
+    end
+    className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
     style={{ 
       justifyContent: isCollapsed ? 'center' : 'flex-start', 
       padding: isCollapsed ? '0.75rem' : '0.75rem 1rem' 
@@ -46,6 +51,7 @@ const AdminLayout = () => {
   const { logout, user } = useAuthStore();
   const navigate = useNavigate();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   const handleLogout = () => {
     logout();
@@ -54,7 +60,6 @@ const AdminLayout = () => {
 
   return (
     <div className="flex bg-slate-50" style={{ position: 'fixed', inset: 0, overflow: 'hidden', width: '100vw', height: '100vh' }}>
-      {/* Sidebar */}
       <motion.aside 
         className="sidebar-wrapper"
         animate={{ width: isCollapsed ? 76 : 260 }}
@@ -68,7 +73,6 @@ const AdminLayout = () => {
           flexShrink: 0
         }}
       >
-        {/* Sidebar Brand / Toggle Header */}
         <div 
           className="sidebar-brand" 
           style={{ 
@@ -94,7 +98,9 @@ const AdminLayout = () => {
                   style={{ overflow: 'hidden' }}
                 >
                   <span className="brand-text block" style={{ whiteSpace: 'nowrap' }}>AI Clinic</span>
-                  <span className="brand-sub block" style={{ whiteSpace: 'nowrap' }}>Workspace</span>
+                  <span className="brand-sub block" style={{ whiteSpace: 'nowrap' }}>
+                    {isSuperAdmin ? 'Admin Panel' : 'Workspace'}
+                  </span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -112,7 +118,6 @@ const AdminLayout = () => {
           )}
         </div>
 
-        {/* Expand Menu Button (Visible only when Collapsed) */}
         {isCollapsed && (
           <button 
             onClick={() => setIsCollapsed(false)} 
@@ -126,17 +131,26 @@ const AdminLayout = () => {
         )}
 
         <nav className="flex-1 space-y-2" style={{ display: 'flex', flexDirection: 'column' }}>
-          <SidebarLink to="/" icon={LayoutDashboard} isCollapsed={isCollapsed}>Dashboard</SidebarLink>
-          <SidebarLink to="/patients" icon={Users} isCollapsed={isCollapsed}>Patients & Chats</SidebarLink>
-          <SidebarLink to="/bot-settings" icon={MessageSquare} isCollapsed={isCollapsed}>WhatsApp Bot</SidebarLink>
-          <SidebarLink to="/settings" icon={Settings} isCollapsed={isCollapsed}>Settings</SidebarLink>
+          {isSuperAdmin ? (
+            <>
+              <SidebarLink to="/super-admin" icon={Activity} isCollapsed={isCollapsed}>Analytics</SidebarLink>
+              <SidebarLink to="/super-admin/clinics" icon={Building2} isCollapsed={isCollapsed}>All Clinics</SidebarLink>
+              <SidebarLink to="/super-admin/create-clinic" icon={UserPlus} isCollapsed={isCollapsed}>Add Clinic</SidebarLink>
+            </>
+          ) : (
+            <>
+              <SidebarLink to="/" icon={LayoutDashboard} isCollapsed={isCollapsed}>Dashboard</SidebarLink>
+              <SidebarLink to="/patients" icon={Users} isCollapsed={isCollapsed}>Patients & Chats</SidebarLink>
+              <SidebarLink to="/bot-settings" icon={MessageSquare} isCollapsed={isCollapsed}>WhatsApp Bot</SidebarLink>
+              <SidebarLink to="/settings" icon={Settings} isCollapsed={isCollapsed}>Settings</SidebarLink>
+            </>
+          )}
         </nav>
 
-        {/* User Card */}
         <div className="user-card" style={{ padding: isCollapsed ? '1rem 0' : '1.5rem 0' }}>
           <div className="user-info" style={{ justifyContent: isCollapsed ? 'center' : 'flex-start', padding: 0 }}>
             <div className="user-avatar" style={{ flexShrink: 0 }}>
-              DR
+              {user?.name?.charAt(0)?.toUpperCase() || 'A'}
             </div>
             <AnimatePresence initial={false}>
               {!isCollapsed && (
@@ -147,8 +161,10 @@ const AdminLayout = () => {
                   transition={{ duration: 0.2 }}
                   style={{ overflow: 'hidden', marginLeft: '0.75rem' }}
                 >
-                  <p className="user-name" style={{ whiteSpace: 'nowrap', margin: 0 }}>{user?.name || 'Dr. Admin'}</p>
-                  <p className="user-role" style={{ whiteSpace: 'nowrap', margin: 0 }}>{user?.role || 'DOCTOR'}</p>
+                  <p className="user-name" style={{ whiteSpace: 'nowrap', margin: 0 }}>{user?.name || 'Admin'}</p>
+                  <p className="user-role" style={{ whiteSpace: 'nowrap', margin: 0 }}>
+                    {isSuperAdmin ? 'Super Admin' : 'Doctor'}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -180,33 +196,28 @@ const AdminLayout = () => {
         </div>
       </motion.aside>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden" style={{ height: '100%' }}>
-        {/* Floating Topbar */}
         <header className="topbar-wrapper">
           <div className="search-container">
             <Search style={{ width: '16px', height: '16px', color: '#94a3b8', marginRight: '8px' }} />
             <input 
               type="text" 
-              placeholder="Search patients, messages, or files..." 
+              placeholder={isSuperAdmin ? "Search clinics..." : "Search patients, messages..."} 
               className="search-input"
             />
           </div>
           <div className="topbar-actions">
-            {/* Notification Badge */}
             <button className="btn-icon-topbar">
               <Bell style={{ width: '16px', height: '16px' }} />
               <span className="notification-dot"></span>
             </button>
-            {/* Live Gateway Check */}
             <div className="status-pill">
               <CheckCircle2 style={{ width: '16px', height: '16px' }} />
-              <span>WhatsApp active</span>
+              <span>{isSuperAdmin ? 'Admin Console' : 'WhatsApp active'}</span>
             </div>
           </div>
         </header>
 
-        {/* Fluid Viewport */}
         <main className="main-viewport">
           <div className="viewport-content">
             <Outlet />

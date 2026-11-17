@@ -7,6 +7,8 @@ const DoctorSchema = new mongoose.Schema({
     required: true 
   },
   name: { type: String, required: true },
+  phone: { type: String },
+  regNo: { type: String },
   specialty: { type: String, required: true },
   experience: { type: String },
   bio: { type: String },
@@ -25,5 +27,6 @@ const DoctorSchema = new mongoose.Schema({
 });
 
 DoctorSchema.index({ clinicId: 1 });
+DoctorSchema.index({ clinicId: 1, phone: 1 });
 
 module.exports = mongoose.model('Doctor', DoctorSchema);

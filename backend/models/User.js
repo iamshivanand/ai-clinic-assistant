@@ -7,13 +7,13 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true, select: false },
   role: { 
     type: String, 
-    enum: ['DOCTOR', 'SUPER_ADMIN'], 
+    enum: ['DOCTOR', 'SUPER_ADMIN', 'RECEPTIONIST', 'PHARMACIST'], 
     default: 'DOCTOR' 
   },
   clinicId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Clinic' 
-    // clinicId is required for DOCTOR, but null for SUPER_ADMIN
+    // clinicId is required for DOCTOR, RECEPTIONIST, PHARMACIST, but null for SUPER_ADMIN
   },
   createdAt: { type: Date, default: Date.now }
 });

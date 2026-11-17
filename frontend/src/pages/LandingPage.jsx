@@ -44,46 +44,49 @@ const LandingPage = () => {
 
   const plans = [
     {
-      name: "Starter Trial",
-      price: "₹0",
-      period: "for 14 days",
-      cta: "Start Free Trial",
+      name: "Solo Doctor Starter",
+      price: "₹1,999",
+      period: "per month",
+      cta: "Get Starter",
       features: [
-        "1 Active WhatsApp Receptionist",
-        "Up to 50 bookings / month",
-        "Live Queue Timeline view",
-        "Basic Print Rx templates",
-        "Email support"
+        "24/7 Bilingual WhatsApp Receptionist",
+        "Zero-Typing Doctor Voice-to-Rx",
+        "Live OPD Token Queue Tracker",
+        "Instant PDFKit Rx with WhatsApp QR",
+        "1,500 WhatsApp Utility Credits",
+        "Email & Chat Support"
       ],
       premium: false
     },
     {
-      name: "Clinic Pro",
-      price: "₹8,000",
+      name: "Clinic AI Pro",
+      price: "₹3,499",
       period: "per month",
       cta: "Get Clinic Pro",
       features: [
-        "Unlimited WhatsApp Chats",
-        "Unlimited Booking Receptions",
-        "Full GMB Review Auto-Campaigns",
-        "Custom Printable Rx Layouts",
-        "Priority 24/7 Whatsapp Support",
-        "Uptime SLA Guarantee"
+        "Everything in Starter, plus:",
+        "Multimodal Lab Report Vision OCR",
+        "Patient Medicine Strip Verification",
+        "Vernacular 30s Audio Rx Explainer",
+        "Sentiment-Gated Google Review Booster",
+        "Day-3 & Day-25 Chronic Refill Loops",
+        "3,000 WhatsApp Utility Credits"
       ],
       premium: true,
-      badge: "Best Value"
+      badge: "Most Popular"
     },
     {
-      name: "Group Practice",
-      price: "₹18,000",
+      name: "Polyclinic Multi-Specialty",
+      price: "₹7,999",
       period: "per month",
-      cta: "Contact Enterprise",
+      cta: "Contact Sales",
       features: [
-        "Up to 5 Doctors & Assistants",
-        "Shared WhatsApp Numbers",
-        "Dedicated Integration Manager",
-        "Custom Clinic Analytics",
-        "Developer API Access"
+        "Up to 5 Doctors & Visiting Specialists",
+        "Live Pharmacy & Lab Desk Real-Time Board",
+        "Front-Desk Cash/UPI Fraud Audit Ledger",
+        "WhatsApp Flows 1-Screen Booking",
+        "10,000 WhatsApp Utility Credits",
+        "Dedicated Account Setup Manager"
       ],
       premium: false
     }

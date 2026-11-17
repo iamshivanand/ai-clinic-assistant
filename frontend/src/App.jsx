@@ -61,6 +61,9 @@ const Login = () => {
     if (role === 'DOCTOR') {
       setEmail('doctor@test.com');
       setPassword('password123');
+    } else if (role === 'RECEPTIONIST') {
+      setEmail('receptionist@test.com');
+      setPassword('password123');
     } else {
       setEmail('admin@test.com');
       setPassword('password123');
@@ -122,20 +125,27 @@ const Login = () => {
 
         <div style={{ borderTop: '1px solid var(--slate-200)', paddingTop: '1.25rem', marginTop: '1.5rem', textAlign: 'center' }}>
           <p style={{ fontSize: '11px', color: 'var(--slate-400)', marginBottom: '0.75rem' }}>Quick Autofill (Demo / Tests)</p>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
             <button
               onClick={() => autofill('DOCTOR')}
               className="btn-secondary"
-              style={{ flex: 1, padding: '0.5rem', fontSize: '11px', borderRadius: '0.5rem' }}
+              style={{ flex: 1, padding: '0.45rem', fontSize: '11px', borderRadius: '0.5rem' }}
             >
-              Prefill Doctor
+              Doctor
+            </button>
+            <button
+              onClick={() => autofill('RECEPTIONIST')}
+              className="btn-secondary"
+              style={{ flex: 1, padding: '0.45rem', fontSize: '11px', borderRadius: '0.5rem' }}
+            >
+              Receptionist
             </button>
             <button
               onClick={() => autofill('SUPER_ADMIN')}
               className="btn-secondary"
-              style={{ flex: 1, padding: '0.5rem', fontSize: '11px', borderRadius: '0.5rem' }}
+              style={{ flex: 1, padding: '0.45rem', fontSize: '11px', borderRadius: '0.5rem' }}
             >
-              Prefill Super Admin
+              Super Admin
             </button>
           </div>
         </div>
@@ -157,7 +167,7 @@ function App() {
           <Route 
             path="/" 
             element={
-              <ProtectedRoute allowedRoles={['DOCTOR', 'SUPER_ADMIN']}>
+              <ProtectedRoute allowedRoles={['DOCTOR', 'SUPER_ADMIN', 'RECEPTIONIST', 'PHARMACIST']}>
                 <AdminLayout />
               </ProtectedRoute>
             }

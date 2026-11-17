@@ -34,6 +34,10 @@ export const getPatients = () => api.get('/patients');
 // Dashboard API
 export const getDashboardStats = () => api.get('/dashboard/stats');
 export const getDashboardAppointments = () => api.get('/dashboard/appointments');
+export const getInCabinPatient = () => api.get('/dashboard/in-cabin');
+export const createWalkInPatient = (data) => api.post('/dashboard/walk-in', data);
+export const callTokenIntoCabin = (id) => api.patch(`/dashboard/token/${id}/call`);
+export const markTokenPayment = (id, paymentMode = 'CASH_AT_DESK') => api.patch(`/dashboard/token/${id}/pay`, { paymentMode });
 
 // Chat API
 export const getChatPatients = () => api.get('/chat/patients');

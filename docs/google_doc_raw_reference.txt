@@ -1,0 +1,392 @@
+﻿AI Clinic Assistant: Technical Architecture Upgrade & Gap-Closure Engineering Blueprint
+System evolution strategy and technical specifications to upgrade the existing Express/MongoDB stack to an enterprise multimodal clinical platform.
+1. Executive Summary & Architectural Delta
+Your existing stack (Node.js / Express 5, MongoDB / Mongoose, Redis, BullMQ, Socket.io with Redis Adapter, and React 19 + Vite 8 + Zustand) already solves webhook ingestion, signature validation, multi-tenancy, and real-time chat synchronization.
+
+
+However, the current implementation operates as a Deterministic State-Machine Chatbot (botWorker.js + sessionManager.js) coupled with a web portal. To support all 27 clinical AI features—including Doctor Voice-to-Prescription, Multimodal Lab/Medicine Vision OCR, WhatsApp Flows, Family Multi-Profile Switching, Live OPD Token Tracking, and Front-Desk Fraud Auditing—this document provides the file-by-file engineering blueprint to upgrade your existing repository without breaking your current production modules.
+2. File-by-File Gap Analysis (Current Stack vs. Target Architecture)
+Existing File / Module
+	Current Implementation
+	Critical Bottleneck / Gap
+	Exact Upgrade Action Required
+	workers/botWorker.js
+	Assumes every incoming WhatsApp message is from a Patient and steps through a rigid state machine.
+	Doctors cannot message the bot to dictate Voice Rx or trigger queue delays; patients sending voice notes or lab images mid-flow break the state machine.
+	Split into a top-level Role Router (botWorker.js) that dispatches to doctorBotHandler.js (if sender phone matches a clinic Doctor) or patientBotHandler.js (Hybrid LLM Intent + WhatsApp Flows).
+	queues/index.js
+	Only defines message-queue and notification-queue.
+	Heavy media jobs (downloading 5MB PDFs, Whisper audio transcription, Vision OCR, PDF generation) will stall fast text responses if processed on message-queue.
+	Add a 3rd BullMQ queue: ai-media-queue (workers/aiMediaWorker.js) with isolated concurrency (concurrency: 5) and retry backoff.
+	services/prescriptionService.js
+	Uses html-pdf-node (spawns headless Chromium/Puppeteer) and stores PDFs in MongoDB or local disk.
+	Severe OOM Crash Risk: Chromium consumes 250–400MB RAM per concurrent PDF. Storing PDFs in MongoDB bloats working-set RAM.
+	Replace html-pdf-node with pdfkit (renders in <40ms using <15MB RAM) and upload all PDFs/media directly to Cloudflare R2 / AWS S3.
+	models/Patient.js
+	Indexes phone as a single patient entity per clinic.
+	In India, 1 WhatsApp number manages bookings for 3–5 family members (Self, Kids, Parents). Current schema overwrites names/ages and merges medical histories.
+	Refactor Patient.js to include a familyMembers[] sub-document array and activeMemberId in Redis session state.
+	models/Clinic.js
+	Stores META_ACCESS_TOKEN in plain text inside MongoDB.
+	Security Vulnerability: Database dump exposes permanent WABA tokens for every onboarded clinic.
+	Encrypt metaAccessToken at rest using Node native crypto (AES-256-GCM) with an environment master key (ENCRYPTION_MASTER_KEY).
+	models/User.js
+	Only supports DOCTOR and SUPER_ADMIN roles.
+	Giving the front-desk receptionist the DOCTOR login exposes clinic revenue, allows deleting walk-in billing logs, and compromises prescription integrity.
+	Add RECEPTIONIST and PHARMACIST roles to User.js and enforce route/UI restrictions in authMiddleware.js and ProtectedRoute.jsx.
+	services/whatsappService.js
+	Uses Meta Graph API v18.0 with basic interactive buttons/lists and external Razorpay links.
+	v18.0 faces deprecation; multi-message text trees cause 40% booking drop-off compared to single-screen forms.
+	Upgrade base URL to v21.0+ and add helper methods for WhatsApp Flows (type: "flow") and Native WhatsApp UPI (type: "order_details").
+	models/Appointment.js & Message.js
+	Missing composite indexes identified in your production audit.
+	Full-collection scans (COLLSCAN) as clinic appointment and chat histories scale past 50,000 documents.
+	Add exact compound indexes for (clinicId, date, status, tokenNumber) and (clinicId, patientId, createdAt).
+	3. Database Schema Upgrades (Mongoose Models)
+Below are the exact schema additions and indexes to apply to your models/ directory.
+3.1 models/Clinic.js (AES-256 Token Encryption & Wallet Balance)
+Add token encryption hooks and a prepaid wallet ledger so clinics cannot drain your Meta API balance with unlimited broadcasts:
+
+
+// Key additions to models/Clinic.js
+import crypto from 'crypto';
+
+
+const ALGORITHM = 'aes-256-gcm';
+const MASTER_KEY = Buffer.from(process.env.ENCRYPTION_MASTER_KEY, 'hex'); // 32-byte hex key
+
+
+export function encryptToken(text) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ALGORITHM, MASTER_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+
+export function decryptToken(encryptedPayload) {
+  const [ivHex, authTagHex, encryptedText] = encryptedPayload.split(':');
+  const decipher = crypto.createDecipheriv(ALGORITHM, MASTER_KEY, Buffer.from(ivHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
+
+// Add these fields to clinicSchema:
+// - subscriptionPlan: { type: String, enum: ['STARTER_1999', 'PRO_3499', 'POLYCLINIC_7999'], default: 'STARTER_1999' }
+// - messageWalletBalance: { type: Number, default: 1500 } // Monthly included utility/service credits
+// - freeFollowUpDays: { type: Number, default: 5 } // Used by Post-Visit Paywall Gatekeeper
+// - postVisitQueryFee: { type: Number, default: 200 } // Fee charged on WhatsApp after free window expires
+// - googleReviewLink: { type: String }
+// - letterheadConfig: { logoUrl: String, headerHtml: String, footerText: String, signatureUrl: String }
+3.2 models/Patient.js (One-Phone Family Health Vault & Paywall Tracking)
+Modify Patient.js so one phone number acts as the primary account holder while storing individual family profiles:
+
+
+// Key additions to models/Patient.js
+const familyMemberSchema = new mongoose.Schema({
+  memberId: { type: String, required: true }, // e.g., 'M1', 'M2'
+  name: { type: String, required: true },
+  age: { type: Number },
+  dob: { type: Date }, // Required for Pediatric Vaccine Auto-Scheduler
+  gender: { type: String, enum: ['M', 'F', 'OTHER'] },
+  relation: { type: String, enum: ['SELF', 'SPOUSE', 'CHILD', 'PARENT', 'OTHER'], default: 'SELF' },
+  abhaId: { type: String },
+  bloodGroup: { type: String },
+  allergies: [{ type: String }],
+  chronicConditions: [{ type: String }], // e.g., ['DIABETES_T2', 'HYPERTENSION']
+});
+
+
+// Add to patientSchema:
+// - familyMembers: [familyMemberSchema]
+// - activeMemberId: { type: String, default: 'M1' }
+// - freeChatWindowExpiresAt: { type: Date } // Set to (visitDate + clinic.freeFollowUpDays)
+
+
+// Composite Indexes:
+patientSchema.index({ clinicId: 1, phone: 1 }, { unique: true });
+patientSchema.index({ clinicId: 1, 'familyMembers.chronicConditions': 1 });
+3.3 models/Appointment.js (Live OPD Token Queue & Front-Desk Fraud Auditor)
+Expand Appointment.js to track live token movement, arrival notifications, and cabin-vs-reception billing audits:
+
+
+// Key additions to models/Appointment.js
+// - familyMemberId: { type: String, required: true }
+// - tokenNumber: { type: Number, required: true } // Daily auto-incrementing per (clinicId, doctorId, date)
+// - appointmentType: { type: String, enum: ['IN_CLINIC', 'VIDEO_CONSULT', 'WHATSAPP_QUERY', 'FOLLOW_UP'], default: 'IN_CLINIC' }
+// - queueStatus: { type: String, enum: ['BOOKED', 'WAITING_OUTSIDE', 'IN_CABIN', 'COMPLETED', 'SKIPPED', 'CANCELLED'], default: 'BOOKED' }
+// - estimatedTurnTime: { type: Date } // Dynamically shifted if Doctor sends "Delay 30"
+// - triageSummary: {
+//     rawVoiceUrl: String,
+//     symptomsTranslated: String,
+//     severityFlag: { type: String, enum: ['ROUTINE', 'URGENT_RED_FLAG'], default: 'ROUTINE' },
+//     aiPreReadBullets: [String]
+//   }
+// - billingAudit: {
+//     feeAmount: { type: Number, required: true },
+//     paymentMode: { type: String, enum: ['WHATSAPP_UPI', 'CASH_AT_DESK', 'UNPAID'], default: 'UNPAID' },
+//     collectedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+//     rxGeneratedInCabin: { type: Boolean, default: false },
+//     isDiscrepancyFlagged: { type: Boolean, default: false } // True if rxGeneratedInCabin=true but paymentMode='UNPAID'
+//   }
+
+
+// Composite Indexes (Fixes Section 4 Production Audit Gap):
+appointmentSchema.index({ clinicId: 1, doctorId: 1, date: 1, status: 1, tokenNumber: 1 });
+appointmentSchema.index({ clinicId: 1, patientId: 1, createdAt: -1 });
+3.4 models/Prescription.js (Voice Rx, Audio Explainer & Chronic Refill Loops)
+Upgrade Prescription.js to power automated Day-3 and Day-25 retention campaigns:
+
+
+// Key additions to models/Prescription.js
+// - familyMemberId: { type: String, required: true }
+// - doctorVoiceNoteUrl: { type: String } // Cloudflare R2 URL of doctor's 15s dictation
+// - pdfUrl: { type: String, required: true } // Cloudflare R2 URL of generated PDF
+// - patientAudioExplainerUrl: { type: String } // Cloudflare R2 URL of Hindi/regional TTS voice note
+// - chiefComplaints: [{ type: String }]
+// - vitals: { bp: String, pulse: Number, temp: Number, weight: Number, spo2: Number }
+// - diagnosisTags: [{ type: String }] // Indexed for Outbreak Radar (#24)
+// - advisedProcedure: {
+//     name: String, // e.g., 'Root Canal', 'Cataract Surgery', 'Knee Replacement'
+//     estimatedCost: Number,
+//     dripStatus: { type: String, enum: ['NONE', 'ACTIVE_14_DAY_DRIP', 'CONVERTED', 'DECLINED'], default: 'NONE' }
+//   }
+// - labTestsAdvised: [{ testName: String, isFasting: Boolean, sampleCollected: { type: Boolean, default: false } }]
+// - nextFollowUpDate: { type: Date }
+// - followUpCampaignStatus: {
+//     day3CheckSent: { type: Boolean, default: false },
+//     refillReminderSent: { type: Boolean, default: false },
+//     followUpBooked: { type: Boolean, default: false }
+//   }
+
+
+// Composite Indexes:
+prescriptionSchema.index({ clinicId: 1, nextFollowUpDate: 1, 'followUpCampaignStatus.refillReminderSent': 1 });
+prescriptionSchema.index({ clinicId: 1, diagnosisTags: 1, createdAt: -1 });
+3.5 New Model: models/MedicalRecord.js (Lab OCR, Pill Verification & Home Vitals)
+Create this new model to store computer-vision outputs from patient uploads:
+
+
+import mongoose from 'mongoose';
+
+
+const medicalRecordSchema = new mongoose.Schema({
+  clinicId: { type: mongoose.Schema.Types.ObjectId, ref: 'Clinic', required: true },
+  patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
+  familyMemberId: { type: String, required: true },
+  recordType: {
+    type: String,
+    enum: ['LAB_REPORT', 'OLD_HANDWRITTEN_RX', 'MEDICINE_STRIP_CHECK', 'HOME_VITALS_LCD', 'MEAL_PLATE_PHOTO', 'PROGRESS_PHOTO'],
+    required: true
+  },
+  mediaUrl: { type: String, required: true }, // Cloudflare R2 URL
+  extractedBiomarkers: [{
+    name: String,       // e.g., 'HbA1c', 'Creatinine', 'Systolic_BP'
+    value: Number,      // e.g., 8.2
+    unit: String,       // e.g., '%'
+    referenceRange: String,
+    isAbnormal: Boolean
+  }],
+  aiSummaryBullets: [{ type: String }], // Shown to Doctor before patient enters cabin
+  safetyVerificationResult: {
+    isMatchWithActiveRx: Boolean,
+    discrepancyWarning: String // e.g., 'Chemist gave Pantocid 20mg instead of prescribed 40mg'
+  }
+}, { timestamps: true });
+
+
+medicalRecordSchema.index({ clinicId: 1, patientId: 1, familyMemberId: 1, createdAt: -1 });
+export default mongoose.model('MedicalRecord', medicalRecordSchema);
+4. Upgrading the Worker & Queue Pipeline (queues/ & workers/)
+4.1 Add ai-media-queue in queues/index.js
+Do not process audio transcription, Vision OCR, or PDF rendering inside botWorker.js. Keep botWorker.js strictly for sub-100ms routing and state updates:
+
+
+// queues/index.js
+import { Queue } from 'bullmq';
+import { redisConnection } from '../utils/redis.js';
+
+
+export const messageQueue = new Queue('message-queue', { connection: redisConnection });
+export const notificationQueue = new Queue('notification-queue', { connection: redisConnection });
+
+
+// NEW: Dedicated queue for Whisper STT, Gemini Vision OCR, TTS generation, and PDFKit
+export const aiMediaQueue = new Queue('ai-media-queue', {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 500,
+    removeOnFail: 1000
+  }
+});
+4.2 Role-Based Dispatch in workers/botWorker.js
+Modify the entry point of botWorker.js so it checks whether the WhatsApp sender is a Doctor or a Patient:t
+// Inside workers/botWorker.js processor:
+const { clinicId, fromPhone, messageType, messagePayload } = job.data;
+
+
+// 1. Fast Redis lookup: Is this phone number a registered Doctor at this clinic?
+const doctorProfile = await getCachedDoctorByPhone(clinicId, fromPhone);
+
+
+if (doctorProfile) {
+return await handleDoctorBotMessage({ clinicId, doctor: doctorProfile, messageType, messagePayload });
+}
+
+
+// 2. Otherwise, handle as Patient message
+return await handlePatientBotMessage({ clinicId, fromPhone, messageType, messagePayload });
+
+
+
+### 4.3 Building `workers/doctorBotHandler.js` (Doctor's WhatsApp Admin Bot)
+
+
+This module turns WhatsApp into the doctor's voice-controlled command center:
+
+
+1. **Doctor Sends a Voice Note (`messageType === 'audio'`):**
+   * Enqueue a job on `aiMediaQueue` (`jobName: 'DOCTOR_VOICE_TO_RX'`).
+   * `aiMediaWorker.js` downloads the `.ogg` voice note from Meta Graph API, uploads to Cloudflare R2, and passes the audio buffer to **Sarvam AI (`saaras:v2`)** or **OpenAI Whisper / Gemini 2.5 Flash** with a strict JSON schema prompt:
+     * Extract `patientTokenOrName`, `chiefComplaints[]`, `vitals`, `medicines[{ brandName, genericSalt, dosage, frequency, timing, durationDays }]`, `labTestsAdvised[]`, `nextFollowUpDays`, and `specialInstructions`.
+   * Run a fuzzy lookup (`Fuse.js` or MongoDB Atlas Search) against an Indian Medicine Dataset (250,000+ Indian brands) to normalize spellings (e.g., `"Augmentin Duo"` -> `"Augmentin 625 Duo Tablet (Amoxycillin 500mg + Clavulanic Acid 125mg)"`).
+   * Render the branded PDF using `PDFKit` (<40ms) and send it back to the Doctor's WhatsApp with interactive buttons:
+     * `[✅ Approve & Send Rx]` (Payload: `APPROVE_RX_<rxId>`)
+     * `[🎙️ Append / Edit by Voice]` (Payload: `EDIT_RX_<rxId>`)
+2. **Doctor Taps `[✅ Approve & Send Rx]`:**
+   * Marks `Appointment.billingAudit.rxGeneratedInCabin = true` and `Appointment.queueStatus = 'COMPLETED'`.
+   * Dispatches the PDF prescription to the Patient's WhatsApp.
+   * Enqueues `GENERATE_PATIENT_AUDIO_EXPLAINER` on `aiMediaQueue` (generates a 30s Hindi/regional voice note explaining how to take the medicines and sends it to the patient).
+   * Automatically advances the clinic's Live OPD Queue to the next token and alerts patients waiting 3 tokens ahead (`"Doctor is now seeing Token #13. Your Token #16 is 3 patients away!"`).
+   * Emits a Socket.io event (`queue:updated` and `pharmacy:new_rx`) to update `Dashboard.jsx` and the attached pharmacy desk in real time.
+3. **Doctor Sends Text Command (`"Delay 45"` or `"Status"`):**
+   * `"Delay 45"`: Increments `estimatedTurnTime` by 45 minutes for all remaining `BOOKED` appointments today and triggers a bulk Utility template update to those patients.
+   * `"Status"`: Replies instantly with current waiting count, today's total OPD count, and UPI vs. Cash collection total.
+
+
+## 5. Replacing `html-pdf-node` with `PDFKit` + Cloudflare R2 (`services/prescriptionService.js`)
+
+
+Using `html-pdf-node` in production is the #1 cause of Node.js server crashes under concurrent load. Replace it with **`pdfkit`** and **`@aws-sdk/client-s3`** (configured for Cloudflare R2):
+
+
+### Why This Upgrade Matters:
+* **Memory Footprint:** Drops from ~350MB per PDF (Chromium) to **~8MB per PDF** (`pdfkit` stream).
+* **Generation Speed:** Drops from ~2,500ms to **~35ms**.
+* **Storage Cost:** Cloudflare R2 offers **10GB/month free storage** and **zero egress bandwidth fees** when patients or doctors download PDFs.
+
+
+### Implementation Pattern for `services/prescriptionService.js`:
+1. Create a `PDFDocument({ size: 'A4', margin: 40 })` stream.
+2. Draw the clinic's header banner (`clinic.letterheadConfig`), Doctor's Registration Number, Patient Name/Age/Gender/Token, and Date.
+3. Render the 2-column clinical layout: Left column (28% width) for Chief Complaints, Vitals, and Lab Investigations; Right column (72% width) for the `Rx` table (Medicine Name, Dosage `1-0-1`, Timing `After Food`, Duration `5 Days`).
+4. Embed a dynamic **QR Code** (`qrcode` npm package) at the bottom right of the PDF—scanning it opens the clinic's WhatsApp bot with the patient's follow-up context pre-loaded.
+5. Pipe the buffer directly to Cloudflare R2 (`PutObjectCommand`) and return the public/signed URL.
+
+
+## 6. Hybrid AI Intent Router + Meta WhatsApp Flows (`workers/patientBotHandler.js`)
+
+
+Instead of trapping patients inside a rigid 6-step text state machine (`SELECTING_DOCTOR → SELECTING_DATE → SELECTING_SLOT`), upgrade `patientBotHandler.js` into a **3-Layer Hybrid Pipeline**:
+
+
+### Layer 1: Deterministic Button / Flow Reply Interceptor (0ms Latency, ₹0 AI Cost)
+If the incoming webhook is an `interactive` button click (`button_reply`, `list_reply`, or `nfm_reply` from a WhatsApp Flow), handle it deterministically without calling an LLM:
+* `nfm_reply` (WhatsApp Flow Submission): Parse the JSON payload (`{ memberId, doctorId, date, slot, symptoms }`), create the `Appointment` in MongoDB, and reply immediately with a **Native WhatsApp UPI Payment request (`interactive.type = "order_details"`)**.
+
+
+### Layer 2: Post-Visit Paywall Gatekeeper Check
+Before running AI triage on free-text or image messages, check the patient's `freeChatWindowExpiresAt`:
+* If the patient had a consultation within the last 5 days (`now < patient.freeChatWindowExpiresAt`), allow post-visit follow-up questions and medicine strip verification for free.
+* If `now > patient.freeChatWindowExpiresAt` AND the patient sends a clinical question or lab report photo, hold the message in `PendingQuery`, and reply:
+  * *"Dr. Sharma's free 5-day follow-up window for your last visit has ended. You can book a full clinic visit OR pay ₹200 below for a Quick WhatsApp Report/Query Review by Dr. Sharma."* (Attach 1-tap UPI payment button).
+
+
+### Layer 3: Multimodal AI Router (For Free Text, Voice Notes & Images)
+If the patient sends free text, a voice note, or an image:
+1. **If Audio Note:** Transcribe via Sarvam AI / Whisper into Hindi/English text.
+2. **If Image / PDF Document:** Ask the patient with 3 quick-reply buttons (or auto-classify via Gemini 2.5 Flash Vision):
+   * `[📄 Summarize Lab Report for Doctor]` -> Extracts abnormal biomarkers into `MedicalRecord.js` and attaches a 4-bullet summary to their upcoming appointment.
+   * `[💊 Verify Medicine Strip Bought]` -> Cross-checks the foil wrapper photo against their latest `Prescription.js` and warns them if the chemist gave the wrong mg strength or wrong salt.
+   * `[🩺 Log BP / Sugar Machine Screen]` -> Reads the digital LCD display, logs the reading in `MedicalRecord.js`, plots a 7-day trend chart image (via `chartjs-node-canvas`), and alerts the doctor if critically high/low.
+   * `[🍛 Check Meal Plate (Diet Coach)]` -> Evaluates their lunch/dinner thali against their chronic conditions and replies with a 2-line localized food swap.
+
+
+## 7. Upgrading `workers/notificationWorker.js` (Automated Revenue & Retention Engines)
+
+
+Your existing `notificationWorker.js` already handles appointment reminders and a 2-hour GMB review message. Expand it with these 5 high-ROI scheduled/delayed jobs:
+
+
+1. **Sentiment-Gated Google Review Booster (Upgrading Your Existing 2-Hour Job):**
+   * *Current Flaw:* Sending a direct Google Review link to every patient risks unhappy patients posting 1-star reviews publicly.
+   * *Fix:* At `visitCompleted + 2 hours`, send an interactive WhatsApp message asking: *"How was your consultation with Dr. Sharma today? [⭐ 5 - Excellent] [⭐ 4 - Good] [⭐ 1–3 - Needs Improvement]"*.
+   * If they tap **4 or 5**, instantly reply with the direct Google Maps Review link. If they tap **1–3**, ask *"We're sorry! Tell us what went wrong so Dr. Sharma can resolve this personally"*, log it privately in the dashboard, and alert the clinic manager.
+2. **Day-3 Acute Recovery Check-In (`delay: 72 hours`):**
+   * Triggered automatically for acute diagnoses (Fever, Infection, Pain). Asks if symptoms resolved; if the patient taps `[Still Having Symptoms]`, opens the 1-tap follow-up booking flow.
+3. **Day-25 Chronic Medicine Refill & Repeat Lab Loop (Daily Cron at 9:00 AM):**
+   * Queries `Prescription.js` where `nextFollowUpDate` is 3 days away and `refillReminderSent === false`. Sends a personalized reminder to book their repeat blood test and monthly consultation slot.
+4. **Waitlist Flash-Fill Engine (2 Hours Before Slot):**
+   * When a patient cancels an evening slot, queries `Appointment` where `date === tomorrow` or `waitlist === true` and sends a 10-minute flash claim button so no slot ever goes empty.
+5. **Nightly 9:30 PM Doctor "CEO Briefing" + Fraud Audit Cron:**
+   * Aggregates today's clinic metrics and sends a visual summary to the Doctor's WhatsApp:
+     * Total OPD Patients, Online UPI vs. Desk Cash collected, Voice Rx generated (and hours of typing saved), AI follow-up revenue recovered, and **⚠️ Front-Desk Billing Mismatches** (where `rxGeneratedInCabin === true` but reception marked `UNPAID`).
+
+
+## 8. Frontend Upgrades (`React 19 + Vite 8 + Zustand`)
+
+
+To match the backend upgrades, make these targeted additions to your React codebase:
+
+
+1. **Role-Based Views in `AdminLayout.jsx` & `Dashboard.jsx`:**
+   * Check `useAuthStore().user.role`:
+     * **`RECEPTIONIST` View:** Shows the **Live Token Queue Manager** (Add Walk-In Token, Call Next Patient, Mark Cash Paid, Print Blank/Digital Rx) and hides the total monthly revenue cards and fraud audit logs.
+     * **`DOCTOR` View:** Displays a distraction-free **"Current Patient in Cabin" Cockpit**—showing the patient's 4-bullet AI Pre-Read Summary, abnormal lab trend sparklines, 1-click browser mic button (as a backup to WhatsApp voice dictation), and the Front-Desk Billing Audit alert badge.
+     * **`PHARMACIST / LAB` View:** A real-time Socket.io board (`pharmacy:new_rx`) where approved prescriptions pop up immediately so the compounder can pack medicines before the patient walks out of the doctor's cabin.
+2. **Update Pricing Tiers in `LandingPage.jsx`:**
+   * Replace the current `₹0 Trial / ₹8,000 Clinic Pro` cards with market-calibrated Indian clinic pricing:
+     * **Solo Doctor Starter:** **₹1,999 / month** (24/7 AI Receptionist, Live Queue Tracker, Voice-to-Rx, 1,500 WhatsApp credits).
+     * **Clinic AI Pro (Most Popular):** **₹3,499 / month** (Adds Vision Lab Report OCR, Pill Safety Checker, Vernacular Audio Rx Explainer, Sentiment-Gated Google Review Booster, Chronic Refill Loops, 3,000 credits).
+     * **Polyclinic / Multi-Specialty:** **₹7,999 / month** (Up to 5 Doctors, Pharmacy/Lab Desk Routing, Visiting Consultant Split Ledger, 10,000 credits).
+
+
+## 9. Step-by-Step 14-Day Sprint Checklist to Close All Gaps
+
+
+### Days 1–2: Core Infrastructure & Security
+* Add composite indexes to `Appointment.js`, `Message.js`, and `Prescription.js`.
+* Add AES-256-GCM encryption to `Clinic.js` for `META_ACCESS_TOKEN`.
+* Configure Cloudflare R2 bucket and replace `html-pdf-node` with `pdfkit` in `prescriptionService.js`.
+* Add `RECEPTIONIST` and `PHARMACIST` roles to `User.js` and `authMiddleware.js`.
+
+
+### Days 3–5: Doctor WhatsApp Bot & Zero-Typing Voice Rx
+* Create `ai-media-queue` in `queues/index.js` and `workers/aiMediaWorker.js`.
+* Add the Doctor-vs-Patient phone router at the top of `workers/botWorker.js`.
+* Build `workers/doctorBotHandler.js` (Whisper/Sarvam STT -> Indian Drug DB lookup -> `pdfkit` preview -> `[Approve & Send]` button -> Hindi TTS Audio Explainer for patient).
+
+
+### Days 6–8: Schema Refactor & Patient WhatsApp Flows
+* Upgrade `Patient.js` with `familyMembers[]` and `freeChatWindowExpiresAt`.
+* Upgrade `whatsappService.js` to Graph API `v21.0` and integrate a single-screen **Meta WhatsApp Flow** for appointment booking + **Native WhatsApp UPI**.
+* Implement the **Live OPD Token Tracker** and `"Delay X mins"` command.
+
+
+### Days 9–11: Computer Vision & Multimodal AI Pipeline
+* Create `models/MedicalRecord.js`.
+* Implement Gemini 2.5 Flash Vision handlers in `aiMediaWorker.js` for **Lab Report OCR**, **Medicine Strip Safety Verification**, and **BP/Glucometer LCD Screen Logging**.
+
+
+### Days 12–14: Revenue Automation, Fraud Auditor & Frontend Polish
+* Upgrade `notificationWorker.js` with the **Sentiment-Gated GMB Review Filter**, **Day-3 / Day-25 Follow-Up Loops**, and **9:30 PM Doctor CEO Briefing**.
+* Add the **Post-Visit WhatsApp Query Paywall** (`freeChatWindowExpiresAt` check).
+* Update `Dashboard.jsx` with the Receptionist vs. Doctor role split and update `LandingPage.jsx` pricing tiers.
+

@@ -39,6 +39,7 @@ if (process.env.NODE_ENV === 'production') {
 // Initialize Workers
 require('./workers/botWorker');
 require('./workers/notificationWorker');
+require('./workers/aiMediaWorker');
 
 const app = express();
 

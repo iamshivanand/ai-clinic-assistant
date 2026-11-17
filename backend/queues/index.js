@@ -19,6 +19,22 @@ const defaultJobOptions = {
 const messageQueue = new Queue('message-queue', { connection, defaultJobOptions });
 const notificationQueue = new Queue('notification-queue', { connection, defaultJobOptions });
 
-logger.info('Queues initialized successfully');
+// Dedicated queue for Whisper STT, Gemini Vision OCR, TTS generation, and PDFKit rendering
+const aiMediaQueue = new Queue('ai-media-queue', {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 500,
+    removeOnFail: 1000,
+  },
+});
 
-module.exports = { messageQueue, notificationQueue, connection };
+logger.info('Queues initialized successfully (including ai-media-queue)');
+
+module.exports = {
+  messageQueue,
+  notificationQueue,
+  aiMediaQueue,
+  connection,
+};

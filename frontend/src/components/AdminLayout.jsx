@@ -163,7 +163,7 @@ const AdminLayout = () => {
                 >
                   <p className="user-name" style={{ whiteSpace: 'nowrap', margin: 0 }}>{user?.name || 'Admin'}</p>
                   <p className="user-role" style={{ whiteSpace: 'nowrap', margin: 0 }}>
-                    {isSuperAdmin ? 'Super Admin' : 'Doctor'}
+                    {isSuperAdmin ? 'Super Admin' : (user?.role === 'RECEPTIONIST' ? 'Receptionist' : (user?.role === 'PHARMACIST' ? 'Pharmacist' : 'Doctor'))}
                   </p>
                 </motion.div>
               )}

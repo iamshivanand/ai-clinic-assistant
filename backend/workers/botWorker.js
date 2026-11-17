@@ -43,6 +43,20 @@ const botWorker = new Worker(
     }
 
     const clinic = await getOrCreateDefaultClinic();
+
+    // 1. Check if sender is a registered Clinic Doctor
+    const doctor = await Doctor.findOne({ clinicId: clinic._id, phone: from, isActive: true });
+    if (doctor) {
+      const { handleDoctorBotMessage } = require('./doctorBotHandler');
+      return await handleDoctorBotMessage({
+        clinicId: clinic._id,
+        doctor,
+        fromPhone: from,
+        messageType,
+        messageBody,
+        raw
+      });
+    }
     let patient = await Patient.findOne({ phone: from });
 
     if (!patient) {
@@ -71,12 +85,147 @@ const botWorker = new Worker(
 
     if (messageType === 'interactive') {
       const interactive = raw.entry[0].changes[0].value.messages[0].interactive;
+
+      // Layer 1: WhatsApp Flow Submission (Single-screen booking nfm_reply)
+      if (interactive.type === 'nfm_reply') {
+        try {
+          const flowJson = JSON.parse(interactive.nfm_reply?.response_json || '{}');
+          const { doctorId, date, slot, symptoms, memberId } = flowJson;
+
+          const doctor = (doctorId ? await Doctor.findById(doctorId) : null) || (await Doctor.findOne({ clinicId: clinic._id, isActive: true }));
+          const aptDate = date ? new Date(date) : new Date();
+
+          const startOfDay = new Date(aptDate); startOfDay.setUTCHours(0, 0, 0, 0);
+          const endOfDay = new Date(aptDate); endOfDay.setUTCHours(23, 59, 59, 999);
+          const tokenCount = await Appointment.countDocuments({
+            clinicId: clinic._id,
+            doctorId: doctor._id,
+            date: { $gte: startOfDay, $lte: endOfDay }
+          });
+          const tokenNumber = tokenCount + 1;
+
+          const newAppointment = await Appointment.create({
+            clinicId: clinic._id,
+            patientId: patient._id,
+            familyMemberId: memberId || 'M1',
+            doctorId: doctor._id,
+            tokenNumber,
+            date: aptDate,
+            timeSlot: slot || '10:00 AM',
+            status: 'pending_payment',
+            queueStatus: 'BOOKED',
+            appointmentType: 'IN_CLINIC',
+            billingAudit: {
+              feeAmount: doctor.consultationFee || 500,
+              paymentMode: 'UNPAID'
+            },
+            triageSummary: {
+              symptomsTranslated: symptoms || 'Flow reservation',
+              severityFlag: 'ROUTINE',
+              aiPreReadBullets: [symptoms ? `Chief complaint: ${symptoms}` : 'Single-screen WhatsApp Flow reservation']
+            }
+          });
+
+          // Native WhatsApp UPI payment request
+          try {
+            await whatsappService.sendNativeUpiOrder(
+              from,
+              newAppointment._id.toString(),
+              doctor.consultationFee || 500,
+              `Consultation Fee for Dr. ${doctor.name} (Token #${tokenNumber})`
+            );
+          } catch (upiErr) {
+            await whatsappService.sendTextMessage(
+              from,
+              `✅ *Appointment Reserved!*\n\n` +
+              `• Token Number: *#${tokenNumber}*\n` +
+              `• Doctor: Dr. ${doctor.name}\n` +
+              `• Slot: ${slot || '10:00 AM'}\n\n` +
+              `Please pay the ₹${doctor.consultationFee || 500} consultation fee to confirm your slot.`
+            );
+          }
+          return;
+        } catch (flowErr) {
+          logger.error('Failed to process WhatsApp Flow submission:', flowErr);
+        }
+      }
+
       const buttonId = interactive.button_reply?.id;
       const listId = interactive.list_reply?.id;
       const choiceId = buttonId || listId;
 
+      // Handle Family Member selection
+      if (choiceId && choiceId.startsWith('select_member_')) {
+        const memberId = choiceId.replace('select_member_', '');
+        session.data = { ...session.data, familyMemberId: memberId };
+        const member = patient.familyMembers.find(m => m.memberId === memberId);
+        await whatsappService.sendTextMessage(
+          from,
+          `Booking appointment for *${member?.name || 'Family Member'}* (${member?.relation || 'Patient'}).`
+        );
+        const doctors = await getCachedDoctors(clinic._id);
+        const rows = doctors.map(doc => ({
+          id: doc._id.toString(),
+          title: doc.name,
+          description: doc.specialty
+        }));
+        await whatsappService.sendInteractiveList(
+          from,
+          `Please select the doctor:`,
+          `Select Specialist`,
+          [{ title: `Available Doctors`, rows }]
+        );
+        await sessionManager.setSession(from, {
+          step: 'SELECTING_DOCTOR',
+          data: { patientId: patient._id, familyMemberId: memberId, doctors: doctors.map(d => ({ id: d._id, name: d.name })) }
+        });
+        return;
+      }
+
       if (choiceId && (choiceId.startsWith('confirm_completed_') || choiceId.startsWith('confirm_missed_'))) {
         await handleAppointmentCompletionConfirmation(from, choiceId, session, patient);
+        return;
+      }
+
+      if (choiceId === 'gmb_rating_5' || choiceId === 'gmb_rating_4') {
+        patient.googleReviewStatus = 'completed';
+        await patient.save();
+        const link = clinic.googleReviewLink || process.env.CLINIC_REVIEW_LINK || 'https://g.page/r/example-clinic/review';
+        await whatsappService.sendTextMessage(
+          from,
+          `Thank you so much for your kind words! ⭐⭐⭐⭐⭐\n\nCould you take 30 seconds to support Dr. Sharma by posting on our Google Maps profile?\n👉 ${link}\n\nIt truly helps other families find our clinic!`
+        );
+        return;
+      }
+
+      if (choiceId === 'gmb_rating_1_3') {
+        patient.googleReviewStatus = 'completed';
+        await patient.save();
+        await whatsappService.sendTextMessage(
+          from,
+          `We are deeply sorry that your experience did not meet expectations. 🙏\n\nDr. Sharma and our management team have been alerted. Please reply to this message with your feedback so we can address it immediately.`
+        );
+        return;
+      }
+
+      if (choiceId === 'scan_lab_report') {
+        const { aiMediaQueue } = require('../queues');
+        await aiMediaQueue.add('LAB_REPORT_OCR', { clinicId: clinic._id, patientId: patient._id, fromPhone: from });
+        await whatsappService.sendTextMessage(from, '⏳ Processing your lab report. Biomarkers are being extracted for Dr. Sharma...');
+        return;
+      }
+
+      if (choiceId === 'scan_medicine_strip') {
+        const { aiMediaQueue } = require('../queues');
+        await aiMediaQueue.add('MEDICINE_STRIP_CHECK', { clinicId: clinic._id, patientId: patient._id, fromPhone: from });
+        await whatsappService.sendTextMessage(from, '⏳ Verifying medication strip against your active prescription...');
+        return;
+      }
+
+      if (choiceId === 'scan_bp_screen') {
+        const { aiMediaQueue } = require('../queues');
+        await aiMediaQueue.add('HOME_VITALS_LCD', { clinicId: clinic._id, patientId: patient._id, fromPhone: from });
+        await whatsappService.sendTextMessage(from, '⏳ Logging monitor reading into your health vault...');
         return;
       }
 
@@ -130,6 +279,37 @@ const botWorker = new Worker(
 
     const lang = patient.language || 'en';
     const strings = lang === 'hi' ? require('../lang/hi') : require('../lang/en');
+
+    // Handle Patient Multimodal Image Uploads
+    if (messageType === 'image') {
+      await whatsappService.sendInteractiveButtons(
+        from,
+        `📷 We received your medical photo! How would you like us to process this?`,
+        [
+          { id: 'scan_lab_report', title: '📄 Lab Report OCR' },
+          { id: 'scan_medicine_strip', title: '💊 Verify Medicine' },
+          { id: 'scan_bp_screen', title: '🩺 Log BP/Sugar Screen' }
+        ]
+      );
+      return;
+    }
+
+    // Post-Visit Paywall Gatekeeper (Free 5-day window check)
+    if (session.step === 'IDLE' && patient.freeChatWindowExpiresAt && new Date() > patient.freeChatWindowExpiresAt) {
+      const clinicalKeywords = ['pain', 'fever', 'report', 'medicine', 'tablet', 'swelling', 'infection', 'sugar', 'bp', 'dose'];
+      const text = (messageBody || '').toLowerCase();
+      const hasClinicalQuery = clinicalKeywords.some(k => text.includes(k));
+      if (hasClinicalQuery) {
+        const fee = clinic.postVisitQueryFee || 200;
+        await whatsappService.sendTextMessage(
+          from,
+          `Hello ${patient.name}! Your free 5-day post-visit follow-up window for your previous consultation has ended.\n\n` +
+          `You can schedule a clinic appointment or pay ₹${fee} for an immediate online report review by Dr. Sharma:\n` +
+          `👉 ${process.env.FRONTEND_URL || 'http://localhost:5173'}/quick-consult`
+        );
+        return;
+      }
+    }
 
     switch (session.step) {
       case 'IDLE': {
@@ -185,6 +365,24 @@ async function handleBookAppointment(to, session, patient) {
   if (!patient || patient.name === 'New Patient') {
     await whatsappService.sendTextMessage(to, strings.askName);
     await sessionManager.setSession(to, { step: 'AWAITING_NAME', data: { patientId: patient?._id } });
+    return;
+  }
+
+  // Family profile switching
+  if (patient.familyMembers && patient.familyMembers.length > 1 && !session.data?.familyMemberId) {
+    const buttons = patient.familyMembers.slice(0, 3).map(m => ({
+      id: `select_member_${m.memberId}`,
+      title: `${m.name} (${m.relation})`.slice(0, 20)
+    }));
+    await whatsappService.sendInteractiveButtons(
+      to,
+      `👨‍👩‍👧‍👦 Who is this appointment for? Please select the family profile:`,
+      buttons
+    );
+    await sessionManager.setSession(to, {
+      step: 'SELECTING_MEMBER',
+      data: { patientId: patient._id }
+    });
     return;
   }
 
